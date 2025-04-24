@@ -1,0 +1,9 @@
+*~
+*.tif
+*.tmp
+*.pptx
+*.log
+*.RData
+
+data/
+sandbox/
