@@ -4,6 +4,6 @@
 *.pptx
 *.log
 *.RData
+*.docx
 
-data/
 sandbox/

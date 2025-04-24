@@ -1,0 +1,76 @@
+Column names,Explanation
+Data ID,ID given to the dataset
+Location,"Site location. Can be a university field, or a village name, or equivalent."
+State/Region/County/Province,"The State/Region/County/Province that the location is found in. If this isn’t stated in the data, feel free to google it :) "
+Country,Country of site location
+Continent,Continent of the site location. I have googled this sometimes as I'm not always sure haha!
+"Longitude (E,W)",Longitude coordinates
+"Latitude (N,S)",Latitude coordinates
+Conversion for longitude,Conversion of coordinates. Use the conversion document for this :)
+Conversion for latitude,Conversion of coordinates. Use the conversion document for this :)
+Location source,"This is a description of where the coordinates have come from. You should write things like ""dataset"". ""metadata"", ""paper associated with dataset"". If coordinates are not included, you can either put ""email authors later"", or alternatively, if the description of the location is very specific, I have googled the location and then used google maps to get the coordinates. In this instance, you write ""google maps from description in paper"". If you are not sure what you should do, leave the coodinates as NA. "
+Observation period,Year/years that the data is from. 
+Wheat Type,"Type of wheat used. Should only include latin names of the wheat type, e.g. Triticum aestivum. If you only have the cultivar name, you can google what wheat type that cultivar is and you should be able to find the answer that way :)"
+Crop variety,This is the cultivar type. It should be in the methodology or in the metadata. 
+Tillage type,"This is the type of tillage used in the experiment. It will most often be either Conventional or Conservational, or No Tillage. It should be said in the methodolgy. If it isn't, don't worry :)"
+Planting date,Date that the crop was sown.
+Harvesting date,Date that the crop was harvested. 
+Flowering stage,This is the date when the crop flowered. It is also called the Anthesis date in the papers/data sometimes. 
+Treatment,"This is a column to determine if there is a treatement or not. The only things written in this column should be ""treatment"", ""control"", or ""NA""."
+Treatment type,"This is where you write the description of the treatment that was used. Don't worry if it doesn't make sense, just write whatever they have put as the treatment. If it was a control, just write Control. "
+Grain yield (tons ha-1),The yield recorded. 
+SE,"The standard error of th eyield if included. It should be written after a ""±"" symbol."
+Climate,The described climate of the site location. It should be included in the methodology or metadata if it is included. 
+Mean annual temperature (°C),The mean temperature recorded at the study site. 
+Water regime,This is if they used irrigation or rainfed water regimes. 
+Mean annual precipitation (mm),The mean annual precipitation recorded at the study site. 
+Irrigation (mm),Irrigation amount added (if added). This should be in the methodology or the metadata. 
+Soil properties,Properties of the soil at the soil site. 
+Soil type,"Type of soil found at the site. This can sometimes be an actual named classification, or just the description of the soil e.g. clayey-loam. "
+Soil depth (cm),The depth of the soil analysed. It is in the methodology and should be included at the description of the soil. 
+Sand (%),The percentage of the soil that was sand. 
+Silt (%),The percentage of the soil that was silt. 
+Clay (%),The percentage of the soil that was clay. 
+Soil texture,"The texture of the soil. This is where you would write the ""clayey-loam"" description. If you are repeating this from the soil type column if they have not given a soil classification, that is fine :)"
+Soil organic carbon (g C kg-1),"Amount of organic carbon in the soil. It will be in the methodology and may just be referred to as ""OG"" in the methodology. "
+Soil organic carbon (%),"Amount of organic carbon in the soil. It will be in the methodology and may just be referred to as ""OG"" in the methodology. "
+Category,Ignore. 
+TN (g N kg-1),"Another property of soil, I think it is total nitrogen, but feel free to ignore. It is one of the first columns added and I have forgotten what it stood for. "
+Category,Ignore. 
+C/N ratio,Carbon/Nitrogen ratio. 
+Category,Ignore. 
+Soil pH,The pH of the soil. 
+Category,Ignore. 
+BD (g cm-3),Bulk density of the soil.
+Category,Ignore. 
+Replicates,This is where you include the replicate number if there is one. Often there isn't so don’t worry if you never fill this column. 
+N type,"Type of nitrogen fertiliser used. This should be in the methodology. Sometimes it can be a chemical formula, or a word such as urea. Just put in whatever they state as the fertiliser type :)"
+Category,Ignore. 
+N rate (kg N ha-1),Rate of nitrogen fertiliser applied. 
+ N fertilizer management,"This is how they applied it, feel free to never put anything in this column. It is another hang over column."
+P type,"Type of phosphorous fertiliser used. This should be in the methodology. Sometimes it can be a chemical formula, or a word such as phosphate blah blah blah. Just put in whatever they state as the fertiliser type :)"
+P rate (kg P ha-1),Rate of phosphorous fertiliser applied. 
+Straw return,This is a yes/no column for if they mention that they carried out straw return at the site. 
+Plastic-film mulching,This is a yes/no column for if they mention that they used plastic-film at the site. 
+Emissions (yes/no),This is a yes/no column for if there is emissions data. 
+Cumulative N2O fluxes (kg N ha-1),"This is the nitrogen oxide part of the emissions data. If it is included in the data, there should be a value for this. "
+SE,Standard error.
+SD,Standard deviation.
+Yield-scaled N2O emission (g N Mg-1),"This is the nitrogen oxide part of the emissions data. If it is included in the data, there should be a value for this. "
+SE,Standard error.
+SD,Standard deviation.
+PFPN (kg kg -1),"This is a type of gas that can be emitted. If it is included in the data, there should be a value for this. "
+ANE (kg kg-1),"This is a type of gas that can be emitted. If it is included in the data, there should be a value for this. "
+EFd (%),"This is like the standard error for emissions I think. If it is included in the data, there should be a value for this. "
+Pest prescence?,This is a yes/no column for if pests were detected. 
+Pest detected,"This is where you include the name of the pest detected. Preferably latin names should be included in this column, but if they only provide common names, just use them :) If they group the pests, include all of them. "
+Pest severity score (%),There might be a severity added into the pest data in the file. 
+Pest abundance,"There might be an abundance/incidence recorded for pests instead of a severity score, so include that here. "
+Pest prescence?,Repeat of previous so that if multiple pests detected you can add them all in. 
+Pest detected,Repeat of previous so that if multiple pests detected you can add them all in. 
+Pest severity score (%),Repeat of previous so that if multiple pests detected you can add them all in. 
+Pest abundance,Repeat of previous so that if multiple pests detected you can add them all in. 
+Pest prescence?,This is a yes/no column for if weeds were detected. 
+Main weed detected,"The name of the weed detected. Preferably latin names should be included in this column, but if they only provide common names, just use them :) If they group the weeds, include all of them. "
+Total weed coverage,This is usually a percentage of the experiment that had weed presence. 
+Main weed abundance of total coverage,This is if they have a count of weeds instead. 
