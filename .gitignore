@@ -7,3 +7,5 @@
 *.docx
 
 sandbox/
+data/
+.Rproj.user
