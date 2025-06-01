@@ -1,0 +1,617 @@
+---
+title: "Wheat Dataset Exploration and Analysis - Realistic ML Assessment"
+author: "Sebastian Dohne"
+date: "May 2025"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    code_folding: show
+    fig_width: 12
+    fig_height: 8
+  pdf_document:
+    toc: true
+    fig_width: 12
+    fig_height: 8
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width = 10, fig.height = 6)
+```
+
+## Overview
+
+This analysis explores a wheat dataset containing yield information across different countries, locations, and time periods. The primary objectives are:
+
+- Perform comprehensive data cleaning and quality assessment
+- **Critically evaluate predictor variable availability for ML applications**
+- Create interactive visualizations to understand geographic and temporal patterns
+- Assess data completeness across all 108 variables and identify missing value patterns
+- **Provide realistic ML readiness assessment considering both target and predictor variables**
+- **Recommend feasible analytical approaches given data limitations**
+
+## Load Required Libraries
+
+```{r libraries}
+  library(data.table)    # For fast file reading
+  library(tidyverse)     # Data manipulation
+  library(knitr)         # Tables
+  library(ggplot2)       # Static plots only
+  library(scales)        # For formatting
+  library(leaflet)
+  library(gt)
+  library(kableExtra)
+  library(plotly)        # Interactive plots
+  library(furrr)         # Parallel mapping functions
+  library(VIM)           # Missing data visualization
+```
+
+## Data Loading and Initial Exploration
+
+```{r data-loading}
+# Load wheat data with irrigation and rainfall calendar information
+# Note: fileEncoding handles special characters in country/location names
+data <- read.csv("../../../data/Data/23-05-mergedwheatdata.csv", fileEncoding = "latin1")
+
+# Initial data inspection
+cat("Dataset dimensions:", dim(data), "\n")
+cat("Number of countries:", length(unique(data$Country)), "\n")
+cat("Number of variables:", ncol(data), "\n")
+cat("Time period covered:", range(data$Observation.period, na.rm = TRUE), "\n")
+```
+
+```{r column-names}
+# Display all column names for reference
+cat("Total variables in dataset:", length(names(data)), "\n")
+cat("First 20 variables:\n")
+head(names(data), 20)
+```
+
+## Critical Missing Data Analysis
+
+### Comprehensive Variable Availability Assessment
+
+```{r missing-data-overview}
+# Get comprehensive missing data statistics for all 108 variables
+variable_completeness <- data %>%
+  summarise(across(everything(), ~sum(!is.na(.)))) %>%
+  pivot_longer(everything(), names_to = "variable", values_to = "n_available") %>%
+  mutate(
+    total_observations = nrow(data),
+    percent_available = round((n_available / total_observations) * 100, 1),
+    ml_usability = case_when(
+      percent_available >= 80 ~ "Highly usable (≥80%)",
+      percent_available >= 50 ~ "Moderately usable (50-79%)", 
+      percent_available >= 20 ~ "Limited use (20-49%)",
+      percent_available >= 5 ~ "Rarely available (5-19%)",
+      TRUE ~ "Essentially missing (<5%)"
+    )
+  ) %>%
+  arrange(desc(percent_available))
+
+# Display summary of variable availability
+variable_completeness %>%
+  count(ml_usability) %>%
+  mutate(percentage = round(n / sum(n) * 100, 1)) %>%
+  gt() %>%
+  tab_header(title = "Variable Availability Summary Across All 108 Variables") %>%
+  cols_label(
+    ml_usability = "Usability Category",
+    n = "Number of Variables",
+    percentage = "% of All Variables"
+  ) %>%
+  data_color(
+    columns = ml_usability,
+    colors = scales::col_factor(
+      palette = c("darkred", "red", "orange", "yellow", "green"),
+      domain = c("Essentially missing (<5%)", "Rarely available (5-19%)", 
+                "Limited use (20-49%)", "Moderately usable (50-79%)", "Highly usable (≥80%)")
+    )
+  )
+```
+
+### Top Available Variables for ML
+
+```{r top-variables}
+# Identify which variables are actually usable for ML
+usable_variables <- variable_completeness %>%
+  filter(percent_available >= 50) %>%  # At least 50% availability
+  head(108)
+
+usable_variables %>%
+  gt() %>%
+  tab_header(title = "Top 20 Most Complete Variables (≥50% Available)") %>%
+  cols_label(
+    variable = "Variable Name",
+    n_available = "Available Observations",
+    total_observations = "Total Possible",
+    percent_available = "% Available",
+    ml_usability = "ML Usability"
+  ) %>%
+  data_color(
+    columns = percent_available,
+    colors = scales::col_numeric(
+      palette = c("red", "yellow", "green"),
+      domain = c(0, 100)
+    )
+  )
+```
+
+
+## Essential Variables
+```{r essential-variables}
+# Define essential variable categories based on actual dataset variables
+essential_categories <- list(
+  climate = c("temperature", "precipitation", "temp1", "temp2", "temp3", "temp4", "temp5", 
+              "temp6", "temp7", "temp8", "temp9", "prc1", "prc2", "prc3", "prc4", "prc5", 
+              "prc6", "prc7", "prc8", "prc9", "Climate", "Water.regime", "Mean.annual"),
+  
+  soil = c("Soil.type", "Soil.depth", "Sand", "Silt", "Clay", "Soil.texture", 
+           "Soil.organic.carbon", "TN", "C.N.ratio", "Soil.pH", "BD", "Soil_N"),
+  
+  management = c("Tillage", "Planting", "Harvesting", "Treatment", "N.type", "N.rate", 
+                 "N.fertilizer", "P.type", "P.rate", "Irrigation", "Straw.return", 
+                 "Plastic.film.mulching", "Crop.variety", "Wheat.Type"),
+  
+  geographic = c("Country", "Location", "State.Region", "Continent", "Latitude", 
+                 "Longitude", "Conversion.for", "Elevation", "AEZ", "X", "Y"),
+  
+  temporal = c("Observation.period", "date", "start_date", "end_date", "rainfed_start", 
+               "rainfed_end", "irr_start", "irr_end"),
+  
+  target = c("Grain.yield", "yield"),
+  
+  pest_weed = c("Pest", "weed", "severity", "abundance", "coverage"),
+  
+  emissions = c("N2O", "Emissions", "PFPN", "ANE", "EFd")
+)
+
+# Check availability of essential variables by category
+essential_assessment <- map_dfr(names(essential_categories), function(category) {
+  pattern <- paste(essential_categories[[category]], collapse = "|")
+  matching_vars <- variable_completeness %>%
+    filter(str_detect(variable, regex(pattern, ignore_case = TRUE)))
+  
+  if(nrow(matching_vars) > 0) {
+    matching_vars %>%
+      mutate(category = category) %>%
+      slice_max(percent_available, n = 3) # Top 3 per category
+  } else {
+    tibble(variable = paste("No", category, "variables found"),
+           n_available = 0, total_observations = nrow(data),
+           percent_available = 0, ml_usability = "Missing",
+           category = category)
+  }
+})
+
+essential_assessment %>%
+  gt() %>%
+  tab_header(title = "Essential Agricultural Variables by Category - Based on Actual Dataset") %>%
+  cols_label(
+    category = "Variable Category",
+    variable = "Variable Name", 
+    percent_available = "% Available",
+    ml_usability = "ML Usability"
+  ) %>%
+  data_color(
+    columns = percent_available,
+    colors = scales::col_numeric(
+      palette = c("red", "yellow", "green"),
+      domain = c(0, 100)
+    )
+  )
+```
+
+## Data Cleaning and Preprocessing
+
+### Column Selection and Type Conversion
+
+```{r data-cleaning}
+# Select key variables and rename for easier handling
+# NOTE: This is now limited to only the most complete variables
+yield <- data %>%
+  select(Country, 
+         Observation.period, 
+         Location, 
+         Continent, 
+         State.Region.County.Province, 
+         longitude = Conversion.for.longitude,    # Rename for clarity
+         latitude = Conversion.for.latitude,      # Rename for clarity
+         yield_value = Grain.yield..tons.ha.1.) %>%  # Main outcome variable
+  mutate(
+    # Convert character columns to appropriate numeric types
+    longitude = as.numeric(longitude),
+    latitude = as.numeric(latitude),
+    yield_value = as.numeric(yield_value),
+    Observation.period = as.numeric(Observation.period)
+  ) %>%  
+  filter(
+    # Remove problematic observations
+    !is.na(yield_value),                    # Remove missing yield values
+    !is.na(longitude),                      # Remove missing coordinates
+    !is.na(latitude),
+    yield_value <= 30,                      # Remove unrealistic yield outliers (>30 tons/ha)
+    nchar(as.character(Observation.period)) == 4  # Keep only 4-digit years
+  )
+
+cat("Cleaned dataset dimensions:", dim(yield), "\n")
+cat("Yield range:", range(yield$yield_value), "tons/ha\n")
+cat("Variables retained for analysis:", ncol(yield), "out of original", ncol(data), "\n")
+```
+
+### Data Quality Summary
+
+```{r data-quality}
+# Summary statistics for the cleaned dataset
+summary(yield)
+```
+
+## Realistic ML Readiness Assessment
+
+### **CRITICAL LIMITATION: Predictor Variable Scarcity**
+
+```{r ml-reality-check}
+# Calculate realistic ML feasibility by country
+realistic_ml_assessment <- data %>%
+  group_by(Country) %>%
+  summarise(
+    # Target variable quality (yield data)
+    n_yield_obs = sum(!is.na(Grain.yield..tons.ha.1.)),
+    yield_completeness = round(mean(!is.na(Grain.yield..tons.ha.1.)) * 100, 1),
+    
+    # Predictor variable availability
+    total_variables = ncol(.) - 1, # Exclude country from count
+    variables_50pct_complete = sum(sapply(select(., -Country), function(x) mean(!is.na(x)) >= 0.5)),
+    variables_80pct_complete = sum(sapply(select(., -Country), function(x) mean(!is.na(x)) >= 0.8)),
+    
+    # Key geographic/temporal predictors
+    has_coordinates = !is.na(first(Conversion.for.longitude)) & !is.na(first(Conversion.for.latitude)),
+    has_temporal_data = !is.na(first(Observation.period)),
+    
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    # Predictor availability scores
+    predictor_50_score = round((variables_50pct_complete / total_variables) * 100, 1),
+    predictor_80_score = round((variables_80pct_complete / total_variables) * 100, 1),
+    
+    # Realistic ML feasibility classification
+    realistic_ml_feasibility = case_when(
+      n_yield_obs >= 15 & predictor_80_score >= 20 ~ "Feasible with external data",
+      n_yield_obs >= 10 & predictor_50_score >= 15 ~ "Limited ML possible",
+      n_yield_obs >= 10 & has_coordinates & has_temporal_data ~ "Geographic/temporal only",
+      n_yield_obs >= 5 ~ "Descriptive analysis only",
+      TRUE ~ "Insufficient for any ML"
+    ),
+    
+    # Recommended approach
+    recommended_strategy = case_when(
+      realistic_ml_feasibility == "Feasible with external data" ~ "Integrate climate/soil databases + simple ML",
+      realistic_ml_feasibility == "Limited ML possible" ~ "Use available predictors + correlation analysis", 
+      realistic_ml_feasibility == "Geographic/temporal only" ~ "Spatial interpolation + time series",
+      realistic_ml_feasibility == "Descriptive analysis only" ~ "Trend analysis + basic statistics",
+      TRUE ~ "Focus on data collection"
+    )
+  ) %>%
+  arrange(desc(n_yield_obs))
+
+# Display realistic assessment
+realistic_ml_assessment %>%
+  head(15) %>%
+  select(Country, n_yield_obs, predictor_50_score, predictor_80_score, 
+         realistic_ml_feasibility, recommended_strategy) %>%
+  gt() %>%
+  tab_header(title = "Realistic ML Feasibility Assessment - Considering Predictor Availability") %>%
+  cols_label(
+    Country = "Country",
+    n_yield_obs = "Yield Observations",
+    predictor_50_score = "Variables ≥50% Complete (%)",
+    predictor_80_score = "Variables ≥80% Complete (%)",
+    realistic_ml_feasibility = "Realistic ML Feasibility",
+    recommended_strategy = "Recommended Strategy"
+  ) %>%
+  data_color(
+    columns = realistic_ml_feasibility,
+    colors = scales::col_factor(
+      palette = c("darkred", "red", "orange", "yellow", "lightgreen"),
+      domain = c("Insufficient for any ML", "Descriptive analysis only", 
+                "Geographic/temporal only", "Limited ML possible", "Feasible with external data")
+    )
+  ) %>%
+  cols_width(
+    recommended_strategy ~ px(200)
+  ) %>%
+  tab_style(
+    style = cell_text(size = px(10)),
+    locations = cells_body(columns = recommended_strategy)
+  )
+```
+
+### Feasibility Distribution Analysis
+
+```{r feasibility-distribution}
+# Analyze distribution of realistic ML feasibility
+feasibility_summary <- realistic_ml_assessment %>%
+  count(realistic_ml_feasibility) %>%
+  mutate(
+    percentage = round(n / sum(n) * 100, 1),
+    realistic_ml_feasibility = factor(realistic_ml_feasibility,
+      levels = c("Insufficient for any ML", "Descriptive analysis only", 
+                "Geographic/temporal only", "Limited ML possible", "Feasible with external data"))
+  )
+
+ggplot(feasibility_summary, aes(x = realistic_ml_feasibility, y = n, fill = realistic_ml_feasibility)) +
+  geom_col(alpha = 0.8) +
+  geom_text(aes(label = paste0(n, "\n(", percentage, "%)")), 
+            vjust = 0.5, fontface = "bold", size = 3) +
+  scale_fill_manual(values = c("darkred", "red", "orange", "yellow", "lightgreen")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none",
+    plot.title = element_text(size = 14, face = "bold")
+  ) +
+  labs(
+    title = "Realistic ML Feasibility Distribution",
+    subtitle = "Assessment includes both target variable quality AND predictor availability",
+    x = "ML Feasibility Category", 
+    y = "Number of Countries"
+  )
+```
+
+## Geographic Visualization
+
+### Interactive Leaflet Map
+
+```{r leaflet-map}
+# Create color palette for yield values
+pal <- colorNumeric(palette = "YlOrRd", domain = yield$yield_value)
+
+# Create interactive map showing global wheat yield distribution
+leaflet(yield) %>%
+  addTiles() %>%  # Add base map tiles
+  addCircleMarkers(
+    lng = ~longitude,
+    lat = ~latitude,
+    color = ~pal(yield_value),  # Color by yield value
+    popup = ~paste("Country:", Country, "<br>",
+                   "Location:", Location, "<br>",
+                   "Yield:", round(yield_value, 2), "tons/ha"),
+    radius = 3,
+    fillOpacity = 0.7
+  ) %>%
+  addLegend("bottomright", 
+            pal = pal,
+            values = ~yield_value, 
+            title = "Yield (tons/ha)")
+```
+
+## Missing Data Visualization
+
+### Comprehensive Missing Data Heatmap
+
+```{r comprehensive-missing-heatmap}
+# Create missing data heatmap for countries with most data
+countries_with_data <- data %>%
+  group_by(Country) %>%
+  summarise(total_obs = n(), .groups = 'drop') %>%
+  slice_max(total_obs, n = 20) %>%
+  pull(Country)
+
+# Prepare heatmap data for top countries
+missing_heatmap_data <- data %>%
+  filter(Country %in% countries_with_data) %>%
+  group_by(Country) %>%
+  summarise(across(everything(), ~mean(is.na(.)) * 100), .groups = 'drop') %>%
+  pivot_longer(cols = -Country, 
+               names_to = "Variable", 
+               values_to = "Percent_Missing")
+
+# Create static heatmap (subset of variables for readability)
+selected_vars <- variable_completeness %>%
+  slice_head(n = 30) %>%  # Top 30 most complete variables
+  pull(variable)
+
+missing_heatmap_data %>%
+  filter(Variable %in% selected_vars) %>%
+  ggplot(aes(x = Variable, y = Country, fill = Percent_Missing)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "green", mid = "yellow", high = "red", 
+                       midpoint = 50, name = "% Missing") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        plot.title = element_text(size = 14, face = "bold")) +
+  labs(title = "Missing Data Heatmap - Top 30 Most Complete Variables", 
+       subtitle = "Countries with most observations shown",
+       x = "Variable", 
+       y = "Country")
+```
+
+### Interactive Missing Data Explorer
+
+```{r interactive-missing-heatmap}
+# Interactive heatmap for detailed exploration
+p <- plot_ly(
+  data = missing_heatmap_data %>% filter(Variable %in% selected_vars),
+  x = ~Variable,
+  y = ~Country,
+  z = ~Percent_Missing,
+  type = "heatmap",
+  colorscale = list(c(0, "green"), c(0.5, "yellow"), c(1, "red")),
+  hovertemplate = "Country: %{y}<br>Variable: %{x}<br>Missing: %{z}%<extra></extra>"
+) %>%
+  layout(
+    title = "Interactive Missing Data Heatmap",
+    xaxis = list(title = "Variable"),
+    yaxis = list(title = "Country")
+  )
+
+p
+```
+
+## Feasible ML Strategies Given Data Limitations
+
+### Strategy 1: External Data Integration
+
+```{r external-data-strategy}
+# Countries where external data integration could enable ML
+external_data_candidates <- realistic_ml_assessment %>%
+  filter(realistic_ml_feasibility %in% c("Feasible with external data", "Geographic/temporal only")) %>%
+  mutate(
+    # External data sources that could be integrated
+    climate_data_available = "ERA5 Reanalysis (1979-present)",
+    soil_data_available = "SoilGrids 250m Global Database", 
+    satellite_data_available = "MODIS NDVI, Precipitation",
+    elevation_data_available = "SRTM 90m Digital Elevation",
+    
+    # Feasible ML approaches with external data
+    feasible_methods = case_when(
+      n_yield_obs >= 20 ~ "Random Forest, Linear Regression, Time Series",
+      n_yield_obs >= 15 ~ "Linear Regression, Correlation Analysis",
+      n_yield_obs >= 10 ~ "Simple Linear Models, Trend Analysis",
+      TRUE ~ "Descriptive Statistics Only"
+    )
+  )
+
+external_data_candidates %>%
+  select(Country, n_yield_obs, feasible_methods) %>%
+  head(10) %>%
+  gt() %>%
+  tab_header(title = "Countries Suitable for External Data Integration Strategy") %>%
+  cols_label(
+    Country = "Country",
+    n_yield_obs = "Yield Observations", 
+    feasible_methods = "Feasible ML Methods with External Data"
+  )
+```
+
+### Strategy 2: Geographic and Temporal Modeling
+
+```{r geographic-temporal-strategy}
+# Countries suitable for geographic/temporal modeling only
+geographic_candidates <- realistic_ml_assessment %>%
+  filter(realistic_ml_feasibility == "Geographic/temporal only") %>%
+  mutate(
+    available_predictors = "Country, Year, Latitude, Longitude",
+    modeling_approaches = case_when(
+      n_yield_obs >= 15 ~ "Spatial interpolation, Time series forecasting",
+      n_yield_obs >= 10 ~ "Country-specific trends, Regional averaging", 
+      n_yield_obs >= 5 ~ "Basic time trends, Geographic clustering",
+      TRUE ~ "Insufficient for modeling"
+    )
+  )
+
+if(nrow(geographic_candidates) > 0) {
+  geographic_candidates %>%
+    select(Country, n_yield_obs, modeling_approaches) %>%
+    gt() %>%
+    tab_header(title = "Countries for Geographic/Temporal Modeling Only") %>%
+    cols_label(
+      Country = "Country",
+      n_yield_obs = "Yield Observations",
+      modeling_approaches = "Feasible Modeling Approaches"
+    )
+} else {
+  cat("No countries suitable for geographic/temporal modeling only.\n")
+}
+```
+
+### Strategy 3: Descriptive Analysis Focus
+
+```{r descriptive-strategy}
+# Countries limited to descriptive analysis
+descriptive_candidates <- realistic_ml_assessment %>%
+  filter(realistic_ml_feasibility == "Descriptive analysis only") %>%
+  mutate(
+    analysis_approaches = case_when(
+      n_yield_obs >= 8 ~ "Yield trends, Basic statistics, Outlier detection",
+      n_yield_obs >= 5 ~ "Mean yield calculation, Temporal patterns",
+      TRUE ~ "Summary statistics only"
+    )
+  )
+
+if(nrow(descriptive_candidates) > 0) {
+  descriptive_candidates %>%
+    select(Country, n_yield_obs, analysis_approaches) %>%
+    head(10) %>%
+    gt() %>%
+    tab_header(title = "Countries Limited to Descriptive Analysis") %>%
+    cols_label(
+      Country = "Country", 
+      n_yield_obs = "Yield Observations",
+      analysis_approaches = "Feasible Analysis Approaches"
+    )
+} else {
+  cat("No countries limited to descriptive analysis only.\n")
+}
+```
+
+## Revised Key Findings and Recommendations
+
+### Critical Data Reality Check
+
+```{r reality-check-summary}
+# Summary statistics for honest assessment
+total_countries <- nrow(realistic_ml_assessment)
+ml_feasible <- sum(realistic_ml_assessment$realistic_ml_feasibility == "Feasible with external data")
+limited_ml <- sum(realistic_ml_assessment$realistic_ml_feasibility == "Limited ML possible") 
+geographic_only <- sum(realistic_ml_assessment$realistic_ml_feasibility == "Geographic/temporal only")
+descriptive_only <- sum(realistic_ml_assessment$realistic_ml_feasibility == "Descriptive analysis only")
+insufficient <- sum(realistic_ml_assessment$realistic_ml_feasibility == "Insufficient for any ML")
+
+avg_predictor_completeness <- round(mean(realistic_ml_assessment$predictor_50_score), 1)
+```
+
+### **Honest ML Readiness Summary**
+
+1. **Total Countries Analyzed**: `r total_countries` countries
+2. **Countries with Sufficient Predictors for ML**: `r ml_feasible` (`r round(ml_feasible/total_countries*100, 1)`%)
+3. **Countries Requiring External Data**: `r ml_feasible + geographic_only` (`r round((ml_feasible + geographic_only)/total_countries*100, 1)`%)
+4. **Average Predictor Completeness**: `r avg_predictor_completeness`% of variables ≥50% complete
+5. **Countries Unsuitable for ML**: `r insufficient` (`r round(insufficient/total_countries*100, 1)`%)
+
+### **Realistic ML Approaches by Feasibility Level**
+
+**Feasible with External Data (`r ml_feasible` countries):**
+- Integrate climate databases (ERA5, WorldClim)
+- Add soil databases (SoilGrids, HWSD) 
+- Use satellite indices (NDVI, precipitation)
+- Apply standard ML: Random Forest, Linear Regression
+- Implement cross-validation and feature selection
+
+**Descriptive Analysis Only (`r descriptive_only` countries):**
+- Calculate yield statistics and trends
+- Identify temporal patterns
+- Outlier detection and data quality assessment
+- Basic correlation analysis
+- Summary reporting for stakeholders
+
+### **Revised Next Steps - Realistic Priorities**
+
+1. **Data Integration Priority**: Focus on external data integration for `r ml_feasible + geographic_only` countries with adequate yield data
+2. **ML Development Strategy**: Start with external data + simple models, not complex algorithms
+3. **Data Collection Strategy**: Target specific predictor variables for high-potential countries
+4. **Analytical Realism**: Match analytical complexity to data availability
+5. **Stakeholder Communication**: Set realistic expectations about ML feasibility
+
+### **External Data Integration Recommendations**
+
+**High-Priority External Datasets:**
+- **Climate**: ERA5 Reanalysis (temperature, precipitation, humidity)
+- **Soil**: SoilGrids 250m (soil type, pH, organic matter, nutrients)
+- **Satellite**: MODIS NDVI, precipitation estimates
+- **Geographic**: SRTM elevation, administrative boundaries
+- **Agricultural**: FAO crop calendars, irrigation maps
+
+**Implementation Strategy:**
+1. Prioritize countries with `r ml_feasible` "Feasible with external data" rating
+2. Integrate 1-2 external datasets initially (climate + soil)
+3. Develop simple but robust ML pipeline
+4. Validate on geographic/temporal holdouts
+5. Expand to additional external datasets as needed
+
+
+---
+
+*This revised analysis provides a realistic assessment of ML feasibility considering both target variable quality and predictor variable availability. The recommendations prioritize achievable goals over aspirational ML applications that are not supported by the available data.*

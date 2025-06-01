@@ -1,0 +1,709 @@
+---
+title: "Wheat Dataset Exploration and Analysis"
+author: "Sebastian Dohne"
+date: "May 2025"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    code_folding: show
+    fig_width: 12
+    fig_height: 8
+  pdf_document:
+    toc: true
+    fig_width: 12
+    fig_height: 8
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width = 10, fig.height = 6)
+```
+
+## Overview
+
+This analysis explores a wheat dataset containing yield information across different countries, locations, and time periods. The primary objectives are:
+
+- Perform comprehensive data cleaning and quality assessment
+- Create interactive visualizations to understand geographic and temporal patterns
+- Assess data completeness and identify missing value patterns
+- Evaluate the dataset's suitability for machine learning applications using quantitative metrics
+
+## Load Required Libraries
+
+```{r libraries}
+  library(data.table)    # For fast file reading
+  library(tidyverse)     # Data manipulation
+  library(knitr)         # Tables
+  library(ggplot2)       # Static plots only
+  library(scales)        # For formatting
+  library(leaflet)
+  library(gt)
+  library(kableExtra)
+  library(plotly)  # Add this to your libraries section
+
+# Parallel processing
+library(furrr)        # Parallel mapping functions
+```
+
+## Data Loading and Initial Exploration
+
+```{r data-loading}
+# Load wheat data with irrigation and rainfall calendar information
+# Note: fileEncoding handles special characters in country/location names
+data <- read.csv("../../../data/Data/wheat_data_with_calendar.csv", fileEncoding = "latin1")
+
+# Initial data inspection
+cat("Dataset dimensions:", dim(data), "\n")
+cat("Number of countries:", length(unique(data$Country)), "\n")
+cat("Time period covered:", range(data$Observation.period, na.rm = TRUE), "\n")
+```
+
+```{r column-names}
+# Display all column names for reference
+names(data)
+```
+
+## Data Cleaning and Preprocessing
+
+### Column Selection and Type Conversion
+
+```{r data-cleaning}
+# Select key variables and rename for easier handling
+yield <- data %>%
+  select(Country, 
+         Observation.period, 
+         Location, 
+         Continent, 
+         State.Region.County.Province, 
+         longitude = Conversion.for.longitude,    # Rename for clarity
+         latitude = Conversion.for.latitude,      # Rename for clarity
+         yield_value = Grain.yield..tons.ha.1.) %>%  # Main outcome variable
+  mutate(
+    # Convert character columns to appropriate numeric types
+    longitude = as.numeric(longitude),
+    latitude = as.numeric(latitude),
+    yield_value = as.numeric(yield_value),
+    Observation.period = as.numeric(Observation.period)
+  ) %>%  
+  filter(
+    # Remove problematic observations
+    !is.na(yield_value),                    # Remove missing yield values
+    !is.na(longitude),                      # Remove missing coordinates
+    !is.na(latitude),
+    yield_value <= 30,                      # Remove unrealistic yield outliers (>30 tons/ha)
+    nchar(as.character(Observation.period)) == 4  # Keep only 4-digit years
+  )
+
+cat("Cleaned dataset dimensions:", dim(yield), "\n")
+cat("Yield range:", range(yield$yield_value), "tons/ha\n")
+```
+
+### Data Quality Summary
+
+```{r data-quality}
+# Summary statistics for the cleaned dataset
+summary(yield)
+```
+
+## Geographic Visualization
+
+### Interactive Leaflet Map
+
+```{r leaflet-map}
+# Create color palette for yield values
+pal <- colorNumeric(palette = "YlOrRd", domain = yield$yield_value)
+
+# Create interactive map showing global wheat yield distribution
+leaflet(yield) %>%
+  addTiles() %>%  # Add base map tiles
+  addCircleMarkers(
+    lng = ~longitude,
+    lat = ~latitude,
+    color = ~pal(yield_value),  # Color by yield value
+    popup = ~paste("Country:", Country, "<br>",
+                   "Location:", Location, "<br>",
+                   "Yield:", round(yield_value, 2), "tons/ha"),
+    radius = 3,
+    fillOpacity = 0.7
+  ) %>%
+  addLegend("bottomright", 
+            pal = pal,
+            values = ~yield_value, 
+            title = "Yield (tons/ha)")
+```
+
+**Map Features:**
+- **Color coding:** Yellow to red gradient representing yield intensity
+- **Interactive popups:** Click markers for detailed information
+- **Legend:** Helps interpret yield values across locations
+
+## Temporal Analysis
+
+### Distribution of Observations Over Time
+
+```{r temporal-analysis}
+# Histogram showing data collection patterns over years
+ggplot(yield, aes(x = Observation.period)) +
+  geom_histogram(binwidth = 1, fill = "steelblue", color = "black", alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Distribution of Wheat Yield Observations Over Time", 
+       x = "Year", 
+       y = "Number of Observations") +
+  theme(plot.title = element_text(size = 14, face = "bold"))
+```
+
+### Yearly Summary Statistics
+
+```{r yearly-summary}
+# Summary of observations and yield by year
+yearly_summary <- yield %>%
+  group_by(Observation.period) %>%
+  summarise(
+    n_observations = n(),
+    mean_yield = round(mean(yield_value), 2),
+    median_yield = round(median(yield_value), 2),
+    n_countries = n_distinct(Country),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(Observation.period))
+
+# Display recent years
+head(yearly_summary, 10) %>%
+  kable(caption = "Recent Years: Observations and Yield Statistics")
+```
+
+## Geographic Distribution Analysis
+
+### Observations by Country and Continent
+
+```{r country-distribution}
+# Bar plot showing observations by country, colored by continent
+ggplot(yield, aes(x = reorder(Country, -table(Country)[Country]), fill = Continent)) +
+  geom_bar() +
+  theme_minimal() +
+  labs(title = "Number of Wheat Yield Observations by Country and Continent", 
+       x = "Country", 
+       y = "Number of Observations") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")) +
+  scale_fill_viridis_d(option = "plasma")
+```
+
+### Country-Continent Summary Table
+
+```{r country-table}
+# Create organized summary table by country and continent
+country_continent_table <- yield %>%
+  group_by(Country, Continent) %>%
+  summarise(
+    count = n(),
+    mean_yield = round(mean(yield_value), 2),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(count))
+
+# Display as formatted table
+country_continent_table %>%
+  head(15) %>%
+  gt() %>%
+  tab_header(title = "Top 15 Countries by Number of Observations") %>%
+  cols_label(
+    Country = "Country",
+    Continent = "Continent", 
+    count = "Observations",
+    mean_yield = "Mean Yield (tons/ha)"
+  ) %>%
+  fmt_number(columns = mean_yield, decimals = 2)
+```
+
+## Missing Data Analysis
+
+### Missing Data Heatmap by Country
+
+```{r missing-data-prep}
+# Prepare data for missing value heatmap
+missing_heatmap_data <- data %>%
+  group_by(Country) %>%
+  summarise(across(everything(), ~mean(is.na(.)) * 100), .groups = 'drop') %>%
+  pivot_longer(cols = -Country, 
+               names_to = "Variable", 
+               values_to = "Percent_Missing")
+```
+
+```{r missing-heatmap}
+# Create heatmap visualization
+ggplot(missing_heatmap_data, aes(x = Variable, y = Country, fill = Percent_Missing)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "red", name = "% Missing") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")) +
+  labs(title = "Missing Data Heatmap by Country", 
+       x = "Variable", 
+       y = "Country")
+```
+
+## Interactive heatmap by country
+
+```{r}
+
+# Percentage missing for all variables
+pct_missing_all <- data %>%
+  group_by(Country) %>%
+  summarise(
+    Total_Obs = n(),
+    across(everything(), ~round(mean(is.na(.)) * 100, 2), .names = "Pct_NA_{.col}")
+  ) %>%
+  arrange(desc(Total_Obs))
+
+# First, create the heatmap_data (this was missing)
+heatmap_data <- pct_missing_all %>%
+  select(-Total_Obs) %>%
+  pivot_longer(cols = -Country, 
+               names_to = "Variable", 
+               values_to = "Pct_Missing",
+               names_prefix = "Pct_NA_")
+
+# Create interactive heatmap - use heatmap_data instead of data
+p <- plot_ly(
+  data = heatmap_data,  # This was the issue - should be heatmap_data, not data
+  x = ~Variable,
+  y = ~Country,
+  z = ~Pct_Missing,
+  type = "heatmap",
+  colorscale = "RdYlBu",
+  reversescale = TRUE,
+  hovertemplate = "Country: %{y}<br>Variable: %{x}<br>Missing: %{z}%<extra></extra>"
+) %>%
+  layout(
+    title = "Missing Data Heatmap",
+    xaxis = list(title = "Variable"),
+    yaxis = list(title = "Country")
+  )
+
+p
+
+```
+
+
+
+## Machine Learning Readiness Assessment
+
+### ML Readiness Quantification Methodology
+
+The ML readiness assessment uses multiple quantitative criteria to evaluate data sufficiency for machine learning applications.
+
+#### Key Metrics Calculated:
+
+1. **Sample Size** (`n_observations`): Total number of yield observations
+2. **Temporal Coverage** (`year_span`): Number of years from first to last observation  
+3. **Temporal Uniqueness** (`n_unique_years`): Number of distinct years with data
+4. **Data Density** (`data_density`): Observations per year (n_observations ÷ year_span)
+5. **Yield Variability** (`yield_sd`): Standard deviation indicating data diversity
+
+#### ML Suitability Classification System:
+
+The classification uses evidence-based thresholds derived from ML best practices:
+
+```{r ml-readiness-methodology}
+# Create a detailed breakdown of ML readiness criteria
+ml_criteria <- data.frame(
+  Category = c("Excellent", "Good", "Moderate", "Limited", "Insufficient"),
+  Min_Observations = c("≥20", "≥15", "≥10", "≥5", "<5"),
+  Min_Year_Span = c("≥10", "≥7", "≥5", "≥3", "<3"),
+  Min_Temporal_Coverage = c("≥60%", "≥50%", "≥40%", "Any", "Any"),
+  Typical_Use_Cases = c(
+    "Complex models, cross-validation, feature engineering",
+    "Standard ML algorithms, basic validation",
+    "Simple models, limited validation",
+    "Exploratory analysis, trend detection", 
+    "Insufficient for reliable ML"
+  ),
+  Recommended_Methods = c(
+    "Random Forest, SVM, Neural Networks, Ensemble",
+    "Linear/Logistic Regression, Decision Trees",
+    "Simple Linear Models, Correlation Analysis",
+    "Descriptive Statistics, Basic Trends",
+    "Data Collection Priority"
+  )
+)
+
+ml_criteria %>%
+  gt() %>%
+  tab_header(title = "ML Readiness Classification Criteria and Recommendations") %>%
+  cols_label(
+    Category = "ML Suitability",
+    Min_Observations = "Min. Observations",
+    Min_Year_Span = "Min. Year Span",
+    Min_Temporal_Coverage = "Min. Temporal Coverage",
+    Typical_Use_Cases = "Typical Use Cases",
+    Recommended_Methods = "Recommended Methods"
+  ) %>%
+  data_color(
+    columns = Category,
+    colors = scales::col_factor(
+      palette = c("red", "orange", "yellow", "lightgreen", "green"),
+      domain = c("Insufficient", "Limited", "Moderate", "Good", "Excellent")
+    )
+  ) %>%
+  cols_width(
+    Category ~ px(100),
+    Min_Observations ~ px(120),
+    Min_Year_Span ~ px(120),
+    Min_Temporal_Coverage ~ px(140),
+    Typical_Use_Cases ~ px(200),
+    Recommended_Methods ~ px(200)
+  ) %>%
+  tab_style(
+    style = cell_text(size = px(11)),
+    locations = cells_body()
+  )
+```
+
+### Country-Level Data Assessment
+
+```{r ml-readiness}
+# Assess which countries have sufficient data for ML modeling
+modeling_readiness <- yield %>%
+  group_by(Country) %>%
+  summarise(
+    n_observations = n(),
+    n_unique_years = n_distinct(Observation.period),
+    year_span = max(Observation.period) - min(Observation.period) + 1,
+    first_year = min(Observation.period),
+    last_year = max(Observation.period),
+    avg_yield = round(mean(yield_value), 2),
+    yield_sd = round(sd(yield_value), 2),
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    # Calculate data density (observations per year span)
+    data_density = round(n_observations / year_span, 2),
+    
+    # Calculate temporal coverage ratio (unique years / total span)
+    temporal_coverage = round(n_unique_years / year_span, 2),
+    
+    # Calculate coefficient of variation for yield diversity
+    cv_yield = round((yield_sd / avg_yield) * 100, 1),
+    
+    # Classify suitability for ML based on multiple criteria
+    ml_suitability = case_when(
+      n_observations >= 20 & year_span >= 10 & temporal_coverage >= 0.6 ~ "Excellent",
+      n_observations >= 15 & year_span >= 7 & temporal_coverage >= 0.5 ~ "Good", 
+      n_observations >= 10 & year_span >= 5 & temporal_coverage >= 0.4 ~ "Moderate",
+      n_observations >= 5 & year_span >= 3 ~ "Limited",
+      TRUE ~ "Insufficient"
+    ),
+    
+    # Add specific ML recommendations
+    recommended_approach = case_when(
+      ml_suitability == "Excellent" ~ "Advanced ML: Ensemble methods, feature engineering",
+      ml_suitability == "Good" ~ "Standard ML: Random Forest, SVM, cross-validation",
+      ml_suitability == "Moderate" ~ "Simple ML: Linear regression, basic validation",
+      ml_suitability == "Limited" ~ "Exploratory: Trend analysis, correlation studies",
+      TRUE ~ "Focus on data collection before ML attempts"
+    )
+  ) %>%
+  arrange(desc(n_observations))
+
+# Display comprehensive ML readiness assessment
+modeling_readiness %>%
+  head(15) %>%
+  gt() %>%
+  tab_header(title = "Comprehensive Machine Learning Readiness Assessment") %>%
+  cols_label(
+    Country = "Country",
+    n_observations = "Total Obs",
+    n_unique_years = "Unique Years", 
+    year_span = "Year Span",
+    temporal_coverage = "Temporal Coverage",
+    data_density = "Obs/Year",
+    cv_yield = "Yield CV (%)",
+    avg_yield = "Mean Yield",
+    ml_suitability = "ML Suitability",
+    recommended_approach = "Recommended Approach"
+  ) %>%
+  data_color(
+    columns = ml_suitability,
+    colors = scales::col_factor(
+      palette = c("red", "orange", "yellow", "lightgreen", "green"),
+      domain = c("Insufficient", "Limited", "Moderate", "Good", "Excellent")
+    )
+  ) %>%
+  data_color(
+    columns = temporal_coverage,
+    colors = scales::col_numeric(
+      palette = c("red", "yellow", "green"),
+      domain = c(0, 1)
+    )
+  ) %>%
+  fmt_number(columns = c(temporal_coverage, data_density), decimals = 2) %>%
+  fmt_number(columns = c(avg_yield), decimals = 1) %>%
+  cols_width(
+    Country ~ px(100),
+    recommended_approach ~ px(250)
+  ) %>%
+  tab_style(
+    style = cell_text(size = px(10)),
+    locations = cells_body(columns = recommended_approach)
+  )
+```
+
+### Advanced ML Readiness Scoring
+
+```{r ml-scoring}
+# Create a composite ML readiness score (0-100)
+modeling_readiness_scored <- modeling_readiness %>%
+  mutate(
+    # Sample size score (0-30 points)
+    sample_score = pmin(30, (n_observations / 50) * 30),
+    
+    # Temporal coverage score (0-25 points)  
+    temporal_score = pmin(25, temporal_coverage * 25),
+    
+    # Data density score (0-20 points)
+    density_score = pmin(20, (data_density / 2) * 20),
+    
+    # Year span score (0-15 points)
+    span_score = pmin(15, (year_span / 20) * 15),
+    
+    # Yield variability score (0-10 points) - rewards moderate variability
+    variability_score = case_when(
+      cv_yield >= 10 & cv_yield <= 30 ~ 10,  # Optimal variability
+      cv_yield >= 5 & cv_yield < 10 ~ 7,     # Low variability
+      cv_yield > 30 & cv_yield <= 50 ~ 7,    # High variability
+      cv_yield > 50 ~ 3,                     # Very high variability
+      TRUE ~ 5                               # Very low variability
+    ),
+    
+    # Total ML readiness score
+    ml_score = round(sample_score + temporal_score + density_score + span_score + variability_score, 1),
+    
+    # Score-based categories
+    score_category = case_when(
+      ml_score >= 80 ~ "Excellent (≥80)",
+      ml_score >= 65 ~ "Good (65-79)",
+      ml_score >= 45 ~ "Moderate (45-64)", 
+      ml_score >= 25 ~ "Limited (25-44)",
+      TRUE ~ "Insufficient (<25)"
+    )
+  ) %>%
+  arrange(desc(ml_score))
+
+# Display top countries by ML score
+modeling_readiness_scored %>%
+  select(Country, n_observations, year_span, temporal_coverage, 
+         cv_yield, ml_score, score_category) %>%
+  head(15) %>%
+  gt() %>%
+  tab_header(title = "Top 15 Countries by ML Readiness Score") %>%
+  cols_label(
+    Country = "Country",
+    n_observations = "Observations",
+    year_span = "Year Span", 
+    temporal_coverage = "Temporal Coverage",
+    cv_yield = "Yield CV (%)",
+    ml_score = "ML Score",
+    score_category = "Score Category"
+  ) %>%
+  data_color(
+    columns = ml_score,
+    colors = scales::col_numeric(
+      palette = c("red", "orange", "yellow", "lightgreen", "green"),
+      domain = c(0, 100)
+    )
+  ) %>%
+  fmt_number(columns = c(temporal_coverage), decimals = 2) %>%
+  fmt_number(columns = c(cv_yield, ml_score), decimals = 1)
+```
+
+### ML Readiness Distribution Analysis
+
+```{r ml-distribution}
+# Analyze distribution of ML readiness scores
+score_distribution <- modeling_readiness_scored %>%
+  count(score_category) %>%
+  mutate(
+    percentage = round(n / sum(n) * 100, 1),
+    score_category = factor(score_category, 
+                           levels = c("Insufficient (<25)", "Limited (25-44)", 
+                                    "Moderate (45-64)", "Good (65-79)", "Excellent (≥80)"))
+  )
+
+# Visualization of score distribution
+ggplot(score_distribution, aes(x = score_category, y = n, fill = score_category)) +
+  geom_col(alpha = 0.8) +
+  geom_text(aes(label = paste0(n, "\n(", percentage, "%)")), 
+            vjust = 0.5, fontface = "bold", size = 3.5) +
+  scale_fill_manual(values = c("red", "orange", "yellow", "lightgreen", "green")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none",
+    plot.title = element_text(size = 14, face = "bold")
+  ) +
+  labs(
+    title = "Distribution of Countries by ML Readiness Score",
+    x = "ML Readiness Category", 
+    y = "Number of Countries",
+    caption = "Higher scores indicate better suitability for machine learning applications"
+  )
+```
+
+### ML Suitability Summary
+
+```{r ml-summary}
+# Summary of ML suitability across all countries
+ml_summary <- modeling_readiness %>%
+  count(ml_suitability) %>%
+  mutate(percentage = round(n / sum(n) * 100, 1))
+
+ggplot(ml_summary, aes(x = reorder(ml_suitability, n), y = n, fill = ml_suitability)) +
+  geom_col() +
+  geom_text(aes(label = paste0(n, " (", percentage, "%)")), hjust = -0.1) +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Distribution of Countries by ML Suitability",
+       x = "ML Suitability Category",
+       y = "Number of Countries") +
+  scale_fill_manual(values = c("Insufficient" = "red", "Limited" = "orange", 
+                               "Moderate" = "yellow", "Good" = "lightgreen", 
+                               "Excellent" = "green")) +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 14, face = "bold"))
+```
+
+### Temporal Trends by Country
+
+```{r country-trends}
+# Calculate yield trends for countries with sufficient data
+yield_trends <- yield %>%
+  group_by(Country) %>%
+  filter(n() >= 5) %>%  # Only countries with at least 5 observations
+  summarise(
+    n_obs = n(),
+    trend_correlation = cor(Observation.period, yield_value, use = "complete.obs"),
+    trend_direction = case_when(
+      trend_correlation > 0.3 ~ "Strong Increase",
+      trend_correlation > 0.1 ~ "Moderate Increase", 
+      trend_correlation > -0.1 ~ "Stable",
+      trend_correlation > -0.3 ~ "Moderate Decrease",
+      TRUE ~ "Strong Decrease"
+    ),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(trend_correlation))
+
+# Display trend analysis
+yield_trends %>%
+  head(10) %>%
+  kable(caption = "Top 10 Countries by Yield Trend (Increasing)") %>%
+  kable_styling()
+```
+
+### Country-Level Summary for ML Planning
+
+```{r country-summary}
+# gives a summary of number of observation years
+yield_summary <- yield %>%
+  group_by(Country) %>%
+  summarise(
+    n_years = n_distinct(Observation.period),
+    year_range = paste(min(Observation.period), "-", max(Observation.period)),
+    avg_yield = round(mean(yield_value), 2),
+    yield_trend = ifelse(cor(Observation.period, yield_value) > 0, "Increasing", "Decreasing"),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(n_years))
+
+# Display summary with enhanced formatting
+yield_summary %>%
+  head(15) %>%
+  gt() %>%
+  tab_header(title = "Country Summary: Temporal Coverage and Yield Patterns") %>%
+  cols_label(
+    Country = "Country",
+    n_years = "Unique Years",
+    year_range = "Year Range", 
+    avg_yield = "Average Yield (tons/ha)",
+    yield_trend = "Overall Trend"
+  ) %>%
+  data_color(
+    columns = yield_trend,
+    colors = scales::col_factor(
+      palette = c("lightcoral", "lightgreen"),
+      domain = c("Decreasing", "Increasing")
+    )
+  )
+```
+
+## Key Findings and Recommendations
+
+### Data Quality Summary
+
+```{r findings-summary}
+excellent_countries <- modeling_readiness %>% 
+  filter(ml_suitability == "Excellent") %>% 
+  nrow()
+
+good_countries <- modeling_readiness %>% 
+  filter(ml_suitability %in% c("Good", "Excellent")) %>% 
+  nrow()
+
+total_countries <- nrow(modeling_readiness)
+total_observations <- nrow(yield)
+```
+
+# use Rsummarytools to make a fucking analysis
+
+
+1. **Geographic Coverage**: The dataset covers `r length(unique(yield$Country))` countries across `r length(unique(yield$Continent))` continents
+2. **Temporal Coverage**: Data spans from `r min(yield$Observation.period)` to `r max(yield$Observation.period)`
+3. **Data Volume**: `r format(total_observations, big.mark = ",")` clean observations after quality filtering
+4. **Yield Range**: From `r min(yield$yield_value)` to `r max(yield$yield_value)` tons/ha
+
+### Machine Learning Readiness Summary
+
+- **Countries suitable for ML**: `r good_countries` out of `r total_countries` countries (`r round(good_countries/total_countries*100, 1)`%) have "Good" or "Excellent" data quality
+- **High-priority countries**: `r excellent_countries` countries have "Excellent" ratings for advanced ML applications
+- **Score-based ranking**: Composite scores (0-100) provide precise prioritization for ML efforts
+
+### Recommended ML Approaches by Country Category
+
+**Excellent Countries (Score ≥80):**
+- Advanced ensemble methods (Random Forest, Gradient Boosting)
+- Neural networks with cross-validation
+- Feature engineering and hyperparameter tuning
+- Time series forecasting models
+
+**Good Countries (Score 65-79):**
+- Standard supervised learning algorithms
+- Basic cross-validation approaches
+- Linear and logistic regression with regularization
+- Decision tree-based models
+
+**Moderate Countries (Score 45-64):**
+- Simple linear models
+- Correlation and trend analysis
+- Basic time series analysis
+- Descriptive statistical modeling
+
+### Next Steps and Recommendations
+
+1. **Priority Data Collection**: Focus on countries with "Limited" or "Insufficient" ratings
+2. **ML Pipeline Development**: Start with "Excellent" rated countries for proof-of-concept
+3. **Feature Engineering**: Incorporate climate, soil, and socioeconomic variables
+4. **Temporal Modeling**: Develop country-specific time series forecasting models
+5. **Spatial Analysis**: Implement geographic clustering and regional modeling
+
+### Data Enhancement Opportunities
+
+- **Environmental Variables**: Temperature, precipitation, soil quality data
+- **Agricultural Practices**: Fertilizer use, irrigation methods, crop rotation
+- **Economic Factors**: Input costs, market prices, policy influences
+- **Technology Adoption**: Mechanization levels, seed varieties, precision agriculture
+
+---
+
+*This comprehensive analysis provides both categorical and quantitative assessments of data quality, enabling informed decisions about machine learning applications and data collection priorities for wheat yield prediction.*

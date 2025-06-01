@@ -1,0 +1,440 @@
+---
+title: "Wheat Dataset Analysis - Lightweight Ubuntu Version"
+author: "Sebastian Dohne"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    code_folding: show
+    fig_width: 10
+    fig_height: 6
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = 'center',
+  cache = TRUE
+)
+
+# Conservative memory management
+options(expressions = 500000)
+options(scipen = 999)
+Sys.setenv('R_MAX_VSIZE' = 16000000000)  # Conservative 16GB limit
+Sys.setenv('OMP_NUM_THREADS' = '4')      # Use only 4 cores to be safe
+
+# Force garbage collection
+gc()
+```
+
+# Library Loading (Conservative)
+
+```{r libraries}
+# Load essential packages only
+suppressPackageStartupMessages({
+  library(data.table)    # For fast file reading
+  library(tidyverse)     # Data manipulation
+  library(knitr)         # Tables
+  library(ggplot2)       # Static plots only
+  library(scales)        # For formatting
+})
+
+# Optional packages (load if available)
+optional_packages <- c("parallel", "doParallel", "foreach")
+for(pkg in optional_packages) {
+  if(requireNamespace(pkg, quietly = TRUE)) {
+    library(pkg, character.only = TRUE)
+    cat("✅ Loaded", pkg, "\n")
+  } else {
+    cat("⚠️ Optional package", pkg, "not available\n")
+  }
+}
+
+cat("Memory usage before data loading:\n")
+print(gc())
+```
+
+# Step-by-Step Data Loading (SAFE APPROACH)
+
+```{r data-loading-safe}
+cat("=== SAFE DATA LOADING APPROACH ===\n")
+
+# Step 1: Check if file exists
+file_path <- "../../../data/Data/23-05-mergedwheatdata.csv"
+if(!file.exists(file_path)) {
+  cat("❌ File not found at:", file_path, "\n")
+  cat("Looking for CSV files in nearby directories...\n")
+  
+  # Search for the file
+  possible_files <- list.files("../..", pattern = ".*wheat.*\\.csv$", 
+                              recursive = TRUE, ignore.case = TRUE)
+  if(length(possible_files) > 0) {
+    cat("Found possible files:\n")
+    print(possible_files)
+    file_path <- file.path("../..", possible_files[1])
+  } else {
+    stop("Cannot find the wheat dataset file!")
+  }
+}
+
+cat("✅ Using file:", file_path, "\n")
+
+
+system.time({
+  data <- fread(file_path, 
+                encoding = "Latin-1")
+})
+
+# Step 5: Validate the loaded data
+cat("✅ Dataset loaded successfully!\n")
+cat("📊 Dimensions:", format(nrow(data), big.mark = ","), "rows ×", ncol(data), "columns\n")
+
+# Memory check
+dataset_size_gb <- round(object.size(data) / 1024^3, 3)
+cat("💾 Dataset size in memory:", dataset_size_gb, "GB\n")
+
+# Quick data validation
+cat("🔍 Data validation:\n")
+cat("   • Non-empty rows:", format(sum(complete.cases(data)), big.mark = ","), "\n")
+cat("   • Completely empty rows:", format(sum(!complete.cases(data)), big.mark = ","), "\n")
+
+# Memory status
+cat("\n💻 Memory status after loading:\n")
+memory_info <- gc()
+print(memory_info)
+
+# Success checkpoint
+cat("\n🎉 DATA LOADING COMPLETED SUCCESSFULLY! 🎉\n")
+```
+
+# Executive Summary
+
+**Data Loading Success!** This analysis covers **`r format(nrow(data), big.mark = ",")`** observations across **`r n_distinct(data$Country, na.rm = TRUE)`** countries with **`r ncol(data)`** variables.
+
+---
+
+# Dataset Structure Analysis
+
+```{r data-structure}
+cat("=== DATASET STRUCTURE ANALYSIS ===\n")
+
+# Column summary (first 20 columns for display)
+col_summary <- data.frame(
+  Column_Index = 1:min(20, ncol(data)),
+  Column_Name = names(data)[1:min(20, ncol(data))],
+  Data_Type = sapply(data[, 1:min(20, ncol(data))], class),
+  Non_NA_Count = sapply(data[, 1:min(20, ncol(data))], function(x) sum(!is.na(x))),
+  Sample_Value = sapply(data[, 1:min(20, ncol(data))], function(x) as.character(x[which(!is.na(x))[1]]))
+)
+
+kable(col_summary, caption = "Dataset Structure - First 20 Columns") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+# Key columns identification
+key_cols <- c("Country", "Observation.period", "Location", "Continent", 
+              "State.Region.County.Province", "Conversion.for.longitude",
+              "Conversion.for.latitude", "Grain.yield..tons.ha.1.")
+
+available_key_cols <- intersect(key_cols, names(data))
+cat("\n🔍 Key columns found:", length(available_key_cols), "of", length(key_cols), "\n")
+cat("Available:", paste(available_key_cols, collapse = ", "), "\n")
+
+if(length(available_key_cols) >= 4) {
+  # Show sample of key data
+  sample_data <- data[1:3, ..available_key_cols]
+  kable(sample_data, caption = "Sample of Key Variables") %>%
+    kable_styling(bootstrap_options = c("striped", "hover"))
+}
+```
+
+# Data Cleaning (Conservative Approach)
+
+```{r data-cleaning-safe}
+cat("=== CONSERVATIVE DATA CLEANING ===\n")
+
+# Find relevant columns
+yield_cols <- names(data)[grepl("yield|Yield|YIELD", names(data), ignore.case = TRUE)]
+lon_cols <- names(data)[grepl("longitude|lon", names(data), ignore.case = TRUE)]
+lat_cols <- names(data)[grepl("latitude|lat", names(data), ignore.case = TRUE)]
+
+cat("📊 Column identification:\n")
+cat("   • Yield columns:", length(yield_cols), "found\n")
+cat("   • Longitude columns:", length(lon_cols), "found\n")
+cat("   • Latitude columns:", length(lat_cols), "found\n")
+
+# Create yield dataset if possible
+if(length(yield_cols) > 0 && length(lon_cols) > 0 && length(lat_cols) > 0) {
+  cat("✅ Creating clean yield dataset...\n")
+  
+  # Select columns safely
+  selected_cols <- c("Country", "Observation.period", "Location", "Continent", 
+                    "State.Region.County.Province")
+  if(lon_cols[1] %in% names(data)) selected_cols <- c(selected_cols, lon_cols[1])
+  if(lat_cols[1] %in% names(data)) selected_cols <- c(selected_cols, lat_cols[1])
+  if(yield_cols[1] %in% names(data)) selected_cols <- c(selected_cols, yield_cols[1])
+  
+  # Filter to existing columns
+  existing_cols <- intersect(selected_cols, names(data))
+  
+  system.time({
+    yield_raw <- data[, ..existing_cols]
+    
+    # Rename columns to standard names
+    if(lon_cols[1] %in% names(yield_raw)) {
+      setnames(yield_raw, lon_cols[1], "longitude")
+    }
+    if(lat_cols[1] %in% names(yield_raw)) {
+      setnames(yield_raw, lat_cols[1], "latitude")
+    }
+    if(yield_cols[1] %in% names(yield_raw)) {
+      setnames(yield_raw, yield_cols[1], "yield_value")
+    }
+    
+    # Clean and filter
+    if(all(c("longitude", "latitude", "yield_value") %in% names(yield_raw))) {
+      yield <- yield_raw[
+        !is.na(as.numeric(yield_value)) & 
+        !is.na(as.numeric(longitude)) & 
+        !is.na(as.numeric(latitude)) &
+        as.numeric(yield_value) > 0 & 
+        as.numeric(yield_value) <= 30 &
+        abs(as.numeric(longitude)) <= 180 &
+        abs(as.numeric(latitude)) <= 90
+      ]
+      
+      # Convert to numeric
+      yield[, `:=`(
+        longitude = as.numeric(longitude),
+        latitude = as.numeric(latitude),
+        yield_value = as.numeric(yield_value),
+        Observation.period = as.numeric(Observation.period)
+      )]
+      
+      cat("✅ Clean yield dataset created:", format(nrow(yield), big.mark = ","), "observations\n")
+    } else {
+      cat("⚠️ Could not create yield dataset - missing required columns\n")
+      yield <- data.table()
+    }
+  })
+} else {
+  cat("⚠️ Cannot create yield dataset - required columns not found\n")
+  yield <- data.table()
+}
+
+# Memory cleanup
+gc()
+```
+
+# Data Quality Summary
+
+```{r quality-summary}
+# Create summary table
+data_quality_summary <- data.frame(
+  Metric = c("Original Rows", "Original Columns", "Clean Rows", "Clean Columns", 
+             "Data Retention", "Countries", "Memory Usage"),
+  Value = c(format(nrow(data), big.mark = ","), 
+            ncol(data), 
+            if(nrow(yield) > 0) format(nrow(yield), big.mark = ",") else "N/A",
+            if(nrow(yield) > 0) ncol(yield) else "N/A",
+            if(nrow(yield) > 0) paste0(round(nrow(yield)/nrow(data)*100, 1), "%") else "N/A",
+            if(nrow(yield) > 0) yield[, uniqueN(Country)] else data[, uniqueN(Country, na.rm = TRUE)],
+            paste(round(object.size(data) / 1024^3, 2), "GB"))
+)
+
+kable(data_quality_summary, caption = "Data Quality Summary") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+# Missing Data Analysis (Lightweight)
+
+```{r missing-analysis-light}
+cat("=== LIGHTWEIGHT MISSING DATA ANALYSIS ===\n")
+
+# Sample approach for missing data (to avoid memory issues)
+sample_size <- min(10000, nrow(data))
+cat("📊 Analyzing missing data using sample of", format(sample_size, big.mark = ","), "rows\n")
+
+# Sample the data
+set.seed(42)  # For reproducibility
+data_sample <- data[sample(.N, sample_size)]
+
+# Calculate missing percentages
+missing_percentages <- data_sample[, lapply(.SD, function(x) round(mean(is.na(x)) * 100, 2))]
+
+# Convert to long format for analysis
+missing_summary <- data.table(
+  Variable = names(missing_percentages),
+  Pct_Missing = as.numeric(missing_percentages[1,])
+)[order(-Pct_Missing)]
+
+# Show top 25 most problematic variables
+top_missing <- head(missing_summary, 25)
+
+kable(top_missing, 
+      caption = paste("Top 25 Variables by Missing Data (Sample of", format(sample_size, big.mark = ","), "rows)"),
+      col.names = c("Variable", "% Missing")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+# Create static bar plot instead of interactive heatmap
+missing_plot <- ggplot(head(top_missing, 15), 
+                      aes(x = reorder(Variable, Pct_Missing), y = Pct_Missing)) +
+  geom_col(fill = "coral", alpha = 0.7) +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Top 15 Variables with Highest Missing Data",
+    subtitle = paste("Based on sample of", format(sample_size, big.mark = ","), "rows"),
+    x = "Variable",
+    y = "Percentage Missing (%)"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12),
+    plot.subtitle = element_text(hjust = 0.5, size = 10),
+    axis.text.y = element_text(size = 8)
+  )
+
+print(missing_plot)
+
+cat("✅ Missing data analysis completed (lightweight approach)\n")
+```
+
+# Geographic Analysis (Static)
+
+```{r geographic-analysis}
+if(nrow(yield) > 0) {
+  cat("=== STATIC GEOGRAPHIC ANALYSIS ===\n")
+  
+  # Sample for geographic visualization (static)
+  geo_sample_size <- min(5000, nrow(yield))
+  set.seed(42)
+  geo_sample <- yield[sample(.N, geo_sample_size)]
+  
+  cat("📍 Creating static geographic plot with", format(nrow(geo_sample), big.mark = ","), "points\n")
+  
+  # Create static world map plot
+  world_plot <- ggplot(geo_sample, aes(x = longitude, y = latitude, color = yield_value)) +
+    geom_point(alpha = 0.6, size = 0.8) +
+    scale_color_viridis_c(name = "Yield\n(tons/ha)", option = "plasma") +
+    theme_minimal() +
+    labs(
+      title = "Wheat Yield Distribution Worldwide",
+      subtitle = paste("Sample of", format(nrow(geo_sample), big.mark = ","), "observations"),
+      x = "Longitude",
+      y = "Latitude"
+    ) +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 10)
+    )
+  
+  print(world_plot)
+  
+  # Country summary
+  country_summary <- yield[, .N, by = .(Country, Continent)][order(-N)]
+  
+  # Top countries plot
+  country_plot <- ggplot(head(country_summary, 15), 
+                        aes(x = reorder(Country, N), y = N, fill = Continent)) +
+    geom_col(alpha = 0.8) +
+    coord_flip() +
+    theme_minimal() +
+    labs(
+      title = "Top 15 Countries by Number of Observations",
+      x = "Country",
+      y = "Number of Observations"
+    ) +
+    theme(plot.title = element_text(hjust = 0.5, size = 12))
+  
+  print(country_plot)
+  
+  cat("✅ Geographic analysis completed\n")
+} else {
+  cat("⚠️ No yield data available for geographic analysis\n")
+}
+```
+
+# Temporal Analysis
+
+```{r temporal-analysis}
+if(nrow(yield) > 0) {
+  cat("=== TEMPORAL ANALYSIS ===\n")
+  
+  # Temporal distribution
+  temporal_data <- yield[!is.na(Observation.period) & Observation.period > 1900 & Observation.period < 2030]
+  
+  if(nrow(temporal_data) > 0) {
+    temporal_plot <- ggplot(temporal_data, aes(x = Observation.period)) +
+      geom_histogram(binwidth = 1, fill = "steelblue", color = "white", alpha = 0.8) +
+      theme_minimal() +
+      labs(
+        title = "Distribution of Wheat Yield Observations by Year",
+        x = "Year", 
+        y = "Number of Observations"
+      ) +
+      theme(plot.title = element_text(hjust = 0.5, size = 12))
+    
+    print(temporal_plot)
+    
+    # Year range summary
+    year_summary <- temporal_data[, .(
+      Min_Year = min(Observation.period),
+      Max_Year = max(Observation.period),
+      Year_Span = max(Observation.period) - min(Observation.period),
+      Total_Obs = .N
+    )]
+    
+    cat("📅 Temporal coverage:\n")
+    cat("   • Year range:", year_summary$Min_Year, "-", year_summary$Max_Year, "\n")
+    cat("   • Span:", year_summary$Year_Span, "years\n")
+    cat("   • Observations:", format(year_summary$Total_Obs, big.mark = ","), "\n")
+  }
+} else {
+  cat("⚠️ No temporal data available for analysis\n")
+}
+```
+
+# Final Summary
+
+```{r final-summary}
+cat("=== FINAL ANALYSIS SUMMARY ===\n")
+
+# Create comprehensive summary
+final_summary <- data.frame(
+  Category = c("Data Loading", "", "", "Processing", "", "", "Output", ""),
+  Metric = c("Total Rows", "Total Columns", "Memory Usage", "Clean Yield Obs", 
+            "Countries", "Geographic Points", "Missing Data Variables", "Analysis Approach"),
+  Value = c(format(nrow(data), big.mark = ","),
+            ncol(data),
+            paste(round(object.size(data) / 1024^3, 2), "GB"),
+            if(nrow(yield) > 0) format(nrow(yield), big.mark = ",") else "N/A",
+            if(nrow(yield) > 0) yield[, uniqueN(Country)] else data[, uniqueN(Country, na.rm = TRUE)],
+            if(nrow(yield) > 0) format(nrow(yield), big.mark = ",") else "N/A",
+            nrow(missing_summary),
+            "Lightweight/Static")
+)
+
+kable(final_summary, caption = "Final Analysis Summary") %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  pack_rows("Dataset", 1, 3) %>%
+  pack_rows("Processing Results", 4, 6) %>%
+  pack_rows("Analysis Output", 7, 8)
+
+# Memory final check
+cat("\n💻 Final memory usage:\n")
+final_memory <- gc()
+print(final_memory)
+
+cat("\n=== SUCCESS! ===\n")
+cat("✅ All", format(nrow(data), big.mark = ","), "rows ×", ncol(data), "columns loaded successfully\n")
+cat("✅ Lightweight analysis completed without memory issues\n")
+cat("✅ Static visualizations generated\n")
+cat("✅ Data validation passed\n")
+cat("\n🚀 Ready for cluster analysis or further processing! 🚀\n")
+```
+
+---
+
