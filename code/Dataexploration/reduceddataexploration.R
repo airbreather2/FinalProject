@@ -42,9 +42,6 @@ library(htmlwidgets)
 
 #use gt tables for nice looking data summaries after cleaning
 
-#open wheat with covariate data
-data <- read.csv("../../data/Data/wheat_data_with_covariats.csv", fileEncoding = "latin1")
-
 data <- read.csv("../../data/Data/combined-wheat.csv", fileEncoding = "latin1")
 
 
@@ -53,25 +50,30 @@ head(data)  # View first few rows
 names(data)  # See all column names
 str(data)   # See structure of the data
 
-# Select and rename columns for easier use
+length(unique(data$Country))
+
+# Select and rename columns for easier use - updated for new column names
 yield <- data %>%
-  select(country, 
-         year, 
-         location, 
-         continent, 
-         longitude = x,    # Just rename here
-         latitude = y,      # Just rename here
-         yield_value = yield) %>%
+  select(Country, 
+         Observation.period,  # Using this as year equivalent
+         Location, 
+         Continent, 
+         longitude = Longitude..E.W.,    # Updated column name
+         latitude = Latitude..N.S.,      # Updated column name
+         yield_value = Grain.yield..tons.ha.1.) %>%  # Updated column name
   mutate(
     longitude = as.numeric(longitude),     # Convert to numeric here
     latitude = as.numeric(latitude),       # Convert to numeric here
-    yield_value = as.numeric(yield_value),  # Convert to numeric here
-    Observation.period = as.numeric(year)
-  ) %>%  
+    yield_value = as.numeric(yield_value)  # Convert to numeric here
+  ) %>%  # Remove the extra closing parenthesis here
   filter(!is.na(yield_value),                       
          !is.na(longitude),
          !is.na(latitude),
-         yield_value <= 30)
+         yield_value <= 30) %>%
+  # Rename columns to match original script expectations
+  rename(country = Country,
+         location = Location,
+         continent = Continent)
 
 
 # Create color palette
@@ -84,8 +86,8 @@ leaflet(yield) %>%
     lng = ~longitude,  # Use the renamed column
     lat = ~latitude,   # Use the renamed column
     color = ~pal(yield_value),
-    popup = ~paste("country:", country, "<br>",
-                   "location:", location, "<br>",
+    popup = ~paste("Country:", country, "<br>",
+                   "Location:", location, "<br>",
                    "Yield:", round(yield_value, 2), "tons/ha"),
     radius = 3,
     fillOpacity = 0.7
@@ -107,89 +109,71 @@ ggplot(yield, aes(x = Observation.period)) +  # Closing parenthesis moved here
 ggplot(yield, aes(x = reorder(country, -table(country)[country]), fill = continent)) +
   geom_bar() +
   theme_minimal() +
-  labs(title = "Number of Observations per country and continent", x = "country", y = "Count") +
+  labs(title = "Number of Observations per Country and Continent", x = "Country", y = "Count") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 #pretty tabular version of this
 country_continent_table <- yield %>%
   group_by(country, continent) %>%
-  summarise(count = n()) %>%
+  summarise(count = n(), .groups = 'drop') %>%
   arrange(desc(count))
 
 country_continent_table %>%
   gt() %>%
-  tab_header(title = "Number of Observations per country and continent") %>%
+  tab_header(title = "Number of Observations per Country and Continent") %>%
   cols_label(
-    country = "country",
-    continent = "continent", 
+    country = "Country",
+    continent = "Continent", 
     count = "Number of Observations"
   )
 
 #############################Visual Heatmap of NA values across dataset############################
 
-# Prepare data for heatmap
+# Prepare data for heatmap - using original column names from new dataset
 missing_heatmap_data <- data %>%
-  group_by(country) %>%
-  summarise(across(everything(), ~mean(is.na(.)) * 100)) %>%
-  pivot_longer(cols = -country, 
+  group_by(Country) %>%
+  summarise(across(everything(), ~mean(is.na(.)) * 100), .groups = 'drop') %>%
+  pivot_longer(cols = -Country, 
                names_to = "Variable", 
                values_to = "Percent_Missing")
 
 # Create heatmap
-ggplot(missing_heatmap_data, aes(x = Variable, y = country, fill = Percent_Missing)) +
+ggplot(missing_heatmap_data, aes(x = Variable, y = Country, fill = Percent_Missing)) +
   geom_tile() +
   scale_fill_gradient(low = "white", high = "red", name = "% Missing") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "Missing Data Heatmap by country", 
+  labs(title = "Missing Data Heatmap by Country", 
        x = "Variable", 
-       y = "country")
+       y = "Country")
 
 #################################Interactive summary table#####################################
 
-# Percentage missing for all variables
-pct_missing_all <- data %>%
-  group_by(country) %>%
-  summarise(
-    Total_Obs = n(),
-    across(everything(), ~round(mean(is.na(.)) * 100, 2), .names = "Pct_NA_{.col}")
-  ) %>%
-  arrange(desc(Total_Obs))
 
-kable(pct_missing_all, caption = "Percentage Missing by country")
+# Basic missing data per column
+missing_per_col <- colSums(is.na(data))
+missing_pct_per_col <- (missing_per_col / nrow(data)) * 100
 
-kable(detailed_summary, caption = "Missing Data Summary by country")
+# Quick summary
+summary(missing_pct_per_col)
 
-#############################Interactive heat map visualization #################################
+# See which variables have the most/least missing data
+data.frame(
+  variable = names(data), # or colnames(data)
+  missing_count = missing_per_col,
+  missing_pct = round(missing_pct_per_col, 1)
+) %>% 
+  arrange(desc(missing_pct)) %>% 
+  head(10) # top 10 most missing variables
 
-# First, create the heatmap_data (this was missing)
-heatmap_data <- pct_missing_all %>%
-  select(-Total_Obs) %>%
-  pivot_longer(cols = -country, 
-               names_to = "Variable", 
-               values_to = "Pct_Missing",
-               names_prefix = "Pct_NA_")
+# Quick histogram to see the distribution
+hist(missing_pct_per_col, 
+     main = "Distribution of Missing Data by Variable",
+     xlab = "Percentage Missing",
+     breaks = 20)
 
-# Create interactive heatmap - use heatmap_data instead of data
-p <- plot_ly(
-  data = heatmap_data,  # This was the issue - should be heatmap_data, not data
-  x = ~Variable,
-  y = ~country,
-  z = ~Pct_Missing,
-  type = "heatmap",
-  colorscale = "RdYlBu",
-  reversescale = TRUE,
-  hovertemplate = "country: %{y}<br>Variable: %{x}<br>Missing: %{z}%<extra></extra>"
-) %>%
-  layout(
-    title = "Missing Data Heatmap",
-    xaxis = list(title = "Variable"),
-    yaxis = list(title = "country")
-  )
-
-# Save as HTML
-htmlwidgets::saveWidget(p, "visualisation/missing_heatmapcovariates_interactive.html")
+# Count how many variables have <50% missing, <75% missing, etc.
+table(cut(missing_pct_per_col, breaks = c(0, 25, 50, 75, 90, 100)))
 
 
-#try and figure out how the heatmap was generated and then try to find a ranking system of countries regarding availability and count etc
 

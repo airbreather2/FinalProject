@@ -45,7 +45,7 @@ head(data)
 
 headers <- names(data)
 
-write.csv(headers, "headers.csv", row.names = FALSE, col.names = FALSE, sep = ",")
+write.csv(headers, "headers.csv", row.names = FALSE)
 
 ################################################################################
 # DATA CLEANING AND YIELD DATASET CREATION
