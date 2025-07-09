@@ -1,0 +1,565 @@
+---
+title: "Fast Comprehensive Dataset Analysis: North America vs Global"
+subtitle: "Complete analysis with efficient processing"
+author: "Sebastian Dohne"
+date: "June 2025"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    theme: flatly
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Executive Summary
+
+**Should you use North American observations or the full global dataset for your wheat yield ML analysis?**
+
+This analysis examines **ALL VARIABLES** efficiently and provides comprehensive comparisons.
+
+```{r libraries}
+# Load essential libraries only
+library(dplyr, warn.conflicts = FALSE)
+```
+
+```{r data-loading}
+# Load and examine the complete dataset
+cat("=== LOADING COMPLETE DATASET ===\n")
+data <- read.csv("../../../../data/Data/chatgptdata/23-05-mergedwheatdatafixed.csv", fileEncoding = "utf-8")
+
+
+cat("Original dataset dimensions:", nrow(data), "rows x", ncol(data), "columns\n")
+
+# Display ALL column names
+cat("\n=== COMPLETE VARIABLE INVENTORY ===\n")
+all_vars <- names(data)
+cat("Total variables:", length(all_vars), "\n\n")
+
+# Categorize variables by type
+yield_vars <- grep("yield|Yield", all_vars, value = TRUE, ignore.case = TRUE)
+soil_vars <- grep("sand|silt|clay|pH|soil|organic|carbon", all_vars, value = TRUE, ignore.case = TRUE)
+climate_vars <- grep("temp|prc|precipitation|temperature|climate", all_vars, value = TRUE, ignore.case = TRUE)
+management_vars <- grep("rate|fertilizer|N\\.|P\\.|K\\.", all_vars, value = TRUE, ignore.case = TRUE)
+location_vars <- grep("country|longitude|latitude|elevation|AEZ|region", all_vars, value = TRUE, ignore.case = TRUE)
+temporal_vars <- grep("year|date|time|season", all_vars, value = TRUE, ignore.case = TRUE)
+other_vars <- setdiff(all_vars, c(yield_vars, soil_vars, climate_vars, management_vars, location_vars, temporal_vars))
+
+cat("VARIABLE CATEGORIES:\n")
+cat("Yield variables (", length(yield_vars), "):", paste(yield_vars, collapse = ", "), "\n")
+cat("Soil variables (", length(soil_vars), "):", paste(soil_vars, collapse = ", "), "\n") 
+cat("Climate variables (", length(climate_vars), "):", paste(climate_vars, collapse = ", "), "\n")
+cat("Management variables (", length(management_vars), "):", paste(management_vars, collapse = ", "), "\n")
+cat("Location variables (", length(location_vars), "):", paste(location_vars, collapse = ", "), "\n")
+cat("Temporal variables (", length(temporal_vars), "):", paste(temporal_vars, collapse = ", "), "\n")
+cat("Other variables (", length(other_vars), "):", paste(other_vars, collapse = ", "), "\n\n")
+```
+
+```{r data-cleaning}
+# Fast data cleaning
+cat("=== FAST DATA CLEANING ===\n")
+
+# Clean yield data
+if("Grain.yield..tons.ha.1." %in% names(data)) {
+  valid_yield <- !is.na(data$Grain.yield..tons.ha.1.) & 
+                 data$Grain.yield..tons.ha.1. > 0 & 
+                 data$Grain.yield..tons.ha.1. < 50
+  
+  clean_data <- data[valid_yield, ]
+  cat("Valid yield observations:", nrow(clean_data), "out of", nrow(data), "\n")
+} else {
+  clean_data <- data
+}
+
+# Clean coordinates if available
+if(all(c("Conversion.for.longitude", "Conversion.for.latitude") %in% names(clean_data))) {
+  valid_coords <- !is.na(clean_data$Conversion.for.longitude) & 
+                  !is.na(clean_data$Conversion.for.latitude)
+  clean_data <- clean_data[valid_coords, ]
+  cat("Valid coordinate observations:", nrow(clean_data), "\n")
+}
+
+# Add derived variables
+clean_data$yield_value <- as.numeric(clean_data$Grain.yield..tons.ha.1.)
+
+cat("Final clean dataset:", nrow(clean_data), "observations\n\n")
+```
+
+```{r dataset-creation}
+# Create comparison datasets
+cat("=== CREATING COMPARISON DATASETS ===\n")
+
+# North America
+na_countries <- c("United States of America", "Canada", "Mexico", "USA", "US", "United States")
+north_america <- clean_data[clean_data$Country %in% na_countries, ]
+
+# Global dataset
+global_dataset <- clean_data
+
+cat("Dataset sizes:\n")
+cat("North America only:", nrow(north_america), "observations\n")
+cat("Global (including NA):", nrow(global_dataset), "observations\n")
+cat("NA as % of Global:", round(nrow(north_america) / nrow(global_dataset) * 100, 1), "%\n\n")
+
+# Country distribution
+cat("Geographic coverage:\n")
+cat("Countries in North America dataset:", length(unique(north_america$Country)), "\n")
+cat("Countries in Global dataset:", length(unique(global_dataset$Country)), "\n\n")
+```
+
+## 1. Complete Variable Analysis
+
+```{r variable-analysis}
+cat("=== COMPLETE VARIABLE AVAILABILITY ANALYSIS ===\n")
+
+# Fast variable completeness analysis
+analyze_completeness_fast <- function(dataset, dataset_name) {
+  cat(dataset_name, "Variable Analysis:\n")
+  
+  # Calculate completeness for ALL variables quickly
+  completeness <- sapply(dataset, function(x) {
+    non_missing <- sum(!is.na(x) & x != "" & x != "NA")
+    round(non_missing / nrow(dataset) * 100, 1)
+  })
+  
+  # Quality categories
+  excellent <- sum(completeness >= 95)
+  good <- sum(completeness >= 80 & completeness < 95)
+  fair <- sum(completeness >= 50 & completeness < 80)
+  poor <- sum(completeness < 50)
+  
+  cat("Variable quality distribution:\n")
+  cat("  Excellent (≥95%):", excellent, "variables\n")
+  cat("  Good (80-94%):", good, "variables\n")
+  cat("  Fair (50-79%):", fair, "variables\n")
+  cat("  Poor (<50%):", poor, "variables\n")
+  
+  mean_completeness <- round(mean(completeness), 1)
+  cat("  Mean completeness:", mean_completeness, "%\n\n")
+  
+  return(list(
+    completeness = completeness,
+    mean_completeness = mean_completeness,
+    excellent = excellent,
+    good = good,
+    fair = fair,
+    poor = poor
+  ))
+}
+
+# Analyze both datasets
+na_analysis <- analyze_completeness_fast(north_america, "NORTH AMERICA")
+global_analysis <- analyze_completeness_fast(global_dataset, "GLOBAL")
+
+# Compare overall quality
+cat("OVERALL QUALITY COMPARISON:\n")
+cat("North America mean completeness:", na_analysis$mean_completeness, "%\n")
+cat("Global mean completeness:", global_analysis$mean_completeness, "%\n")
+improvement <- na_analysis$mean_completeness - global_analysis$mean_completeness
+cat("North America improvement:", sprintf("%+.1f", improvement), "percentage points\n\n")
+
+# Top and bottom variables comparison
+na_comp <- na_analysis$completeness
+global_comp <- global_analysis$completeness
+var_comparison <- na_comp - global_comp[names(na_comp)]
+
+cat("Variables with biggest improvements in North America:\n")
+top_improvements <- sort(var_comparison, decreasing = TRUE)[1:10]
+for(i in 1:length(top_improvements)) {
+  if(top_improvements[i] > 0) {
+    cat("  ", names(top_improvements)[i], ": +", round(top_improvements[i], 1), "% points\n")
+  }
+}
+
+cat("\nVariables with biggest deteriorations in North America:\n")
+bottom_improvements <- sort(var_comparison, decreasing = FALSE)[1:10]
+for(i in 1:length(bottom_improvements)) {
+  if(bottom_improvements[i] < 0) {
+    cat("  ", names(bottom_improvements)[i], ": ", round(bottom_improvements[i], 1), "% points\n")
+  }
+}
+```
+
+## 2. Effective Sample Sizes
+
+```{r sample-size-analysis}
+cat("=== EFFECTIVE SAMPLE SIZE ANALYSIS ===\n")
+
+# Define variable sets
+variable_sets <- list(
+  minimal = c("Grain.yield..tons.ha.1.", "Sand", "Silt", "Clay"),
+  basic_soil = c("Grain.yield..tons.ha.1.", "Sand", "Silt", "Clay", "Soil.pH"),
+  soil_climate = c("Grain.yield..tons.ha.1.", "Sand", "Silt", "Clay", "Soil.pH", 
+                   "temp1", "temp2", "temp3", "prc1", "prc2", "prc3"),
+  extended = c("Grain.yield..tons.ha.1.", "Sand", "Silt", "Clay", "Soil.pH",
+               "temp1", "temp2", "temp3", "temp4", "temp5", "temp6",
+               "prc1", "prc2", "prc3", "prc4", "prc5", "prc6"),
+  comprehensive = c("Grain.yield..tons.ha.1.", "Sand", "Silt", "Clay", "Soil.pH",
+                    "temp1", "temp2", "temp3", "temp4", "temp5", "temp6",
+                    "prc1", "prc2", "prc3", "prc4", "prc5", "prc6",
+                    "AEZ", "Elevation", "N.rate..kg.N.ha.1.", "P.rate..kg.P.ha.1.")
+)
+
+# Fast sample size calculation
+calc_samples_fast <- function(dataset, var_sets, name) {
+  results <- data.frame()
+  
+  for(set_name in names(var_sets)) {
+    vars <- var_sets[[set_name]]
+    available_vars <- intersect(vars, names(dataset))
+    
+    if(length(available_vars) > 1) {
+      subset_data <- dataset[, available_vars, drop = FALSE]
+      complete_cases <- sum(complete.cases(subset_data))
+      percent_complete <- round(complete_cases / nrow(dataset) * 100, 1)
+      
+      results <- rbind(results, data.frame(
+        Dataset = name,
+        Variable_Set = set_name,
+        Available_Vars = length(available_vars),
+        Complete_Cases = complete_cases,
+        Percent_Complete = percent_complete
+      ))
+    }
+  }
+  return(results)
+}
+
+# Calculate for both datasets
+na_samples <- calc_samples_fast(north_america, variable_sets, "North America")
+global_samples <- calc_samples_fast(global_dataset, variable_sets, "Global")
+
+# Display results
+cat("EFFECTIVE SAMPLE SIZE COMPARISON:\n")
+cat("Variable Set     | Dataset      | Vars | Complete Cases | % Complete\n")
+cat("-----------------|--------------|------|----------------|----------\n")
+
+for(set_name in names(variable_sets)) {
+  na_row <- na_samples[na_samples$Variable_Set == set_name, ]
+  global_row <- global_samples[global_samples$Variable_Set == set_name, ]
+  
+  if(nrow(na_row) > 0) {
+    cat(sprintf("%-16s | %-12s | %-4d | %-14d | %-9.1f%%\n",
+                set_name, "N. America", na_row$Available_Vars,
+                na_row$Complete_Cases, na_row$Percent_Complete))
+  }
+  if(nrow(global_row) > 0) {
+    cat(sprintf("%-16s | %-12s | %-4d | %-14d | %-9.1f%%\n",
+                "", "Global", global_row$Available_Vars,
+                global_row$Complete_Cases, global_row$Percent_Complete))
+  }
+  cat("\n")
+}
+
+# Key insights
+extended_na <- na_samples[na_samples$Variable_Set == "extended", ]
+extended_global <- global_samples[global_samples$Variable_Set == "extended", ]
+
+if(nrow(extended_na) > 0 && nrow(extended_global) > 0) {
+  cat("KEY INSIGHTS (Extended variable set):\n")
+  cat("North America:", extended_na$Complete_Cases, "usable observations\n")
+  cat("Global:", extended_global$Complete_Cases, "usable observations\n")
+  cat("Difference:", extended_global$Complete_Cases - extended_na$Complete_Cases, "observations\n")
+  cat("NA as % of Global effective sample:", round(extended_na$Complete_Cases / extended_global$Complete_Cases * 100, 1), "%\n\n")
+}
+```
+
+## 3. Basic Statistical Summary
+
+```{r basic-stats}
+cat("=== BASIC STATISTICAL SUMMARY ===\n")
+
+# Key variables for comparison
+key_vars <- c("yield_value", "Sand", "Silt", "Clay", "Soil.pH", "temp1", "prc1")
+available_key <- intersect(key_vars, names(clean_data))
+
+cat("Statistical comparison for", length(available_key), "key variables:\n\n")
+
+# Fast statistical comparison
+for(var in available_key) {
+  if(var %in% names(north_america) && var %in% names(global_dataset)) {
+    
+    na_vals <- north_america[[var]][!is.na(north_america[[var]])]
+    global_vals <- global_dataset[[var]][!is.na(global_dataset[[var]])]
+    
+    if(length(na_vals) > 10 && length(global_vals) > 10) {
+      cat(var, ":\n")
+      cat("  North America - N:", length(na_vals), 
+          "Mean:", round(mean(na_vals), 3), 
+          "SD:", round(sd(na_vals), 3), "\n")
+      cat("  Global - N:", length(global_vals), 
+          "Mean:", round(mean(global_vals), 3), 
+          "SD:", round(sd(global_vals), 3), "\n")
+      
+      # Simple effect size
+      pooled_sd <- sqrt(((length(na_vals)-1)*var(na_vals) + (length(global_vals)-1)*var(global_vals)) / 
+                       (length(na_vals) + length(global_vals) - 2))
+      cohens_d <- abs(mean(na_vals) - mean(global_vals)) / pooled_sd
+      
+      effect_size <- ifelse(cohens_d < 0.2, "Negligible",
+                           ifelse(cohens_d < 0.5, "Small",
+                                 ifelse(cohens_d < 0.8, "Medium", "Large")))
+      
+      cat("  Effect size:", round(cohens_d, 3), "(", effect_size, ")\n\n")
+    }
+  }
+}
+```
+
+## 4. Fast ML Performance Test
+
+```{r fast-ml-test}
+cat("=== FAST ML PERFORMANCE TEST ===\n")
+
+# Simple ML test with minimal variables to avoid hanging
+simple_ml_vars <- c("yield_value", "Sand", "Silt", "Clay")
+available_ml_vars <- intersect(simple_ml_vars, names(clean_data))
+
+if(length(available_ml_vars) >= 3) {
+  cat("Testing with variables:", paste(available_ml_vars, collapse = ", "), "\n\n")
+  
+  # Prepare datasets
+  na_ml <- north_america[, available_ml_vars, drop = FALSE]
+  na_ml <- na_ml[complete.cases(na_ml), ]
+  
+  global_ml <- global_dataset[, available_ml_vars, drop = FALSE]
+  global_ml <- global_ml[complete.cases(global_ml), ]
+  
+  # Simple test function
+  simple_ml_test <- function(data, name) {
+    if(nrow(data) < 50) {
+      cat(name, ": Insufficient data\n")
+      return(NA)
+    }
+    
+    set.seed(123)
+    train_size <- floor(0.8 * nrow(data))
+    train_idx <- sample(nrow(data), train_size)
+    
+    train_data <- data[train_idx, ]
+    test_data <- data[-train_idx, ]
+    
+    # Simple linear model (fast and reliable)
+    lm_model <- lm(yield_value ~ ., data = train_data)
+    predictions <- predict(lm_model, test_data)
+    
+    # Calculate R²
+    ss_res <- sum((test_data$yield_value - predictions)^2)
+    ss_tot <- sum((test_data$yield_value - mean(test_data$yield_value))^2)
+    r2 <- 1 - (ss_res / ss_tot)
+    
+    cat(name, "Results:\n")
+    cat("  Training size:", nrow(train_data), "\n")
+    cat("  Test size:", nrow(test_data), "\n")
+    cat("  R²:", round(r2, 3), "\n\n")
+    
+    return(r2)
+  }
+  
+  # Run tests
+  na_r2 <- simple_ml_test(na_ml, "NORTH AMERICA")
+  global_r2 <- simple_ml_test(global_ml, "GLOBAL")
+  
+  # Compare performance
+  if(!is.na(na_r2) && !is.na(global_r2)) {
+    cat("PERFORMANCE COMPARISON:\n")
+    if(na_r2 > global_r2) {
+      advantage <- round((na_r2 - global_r2) / global_r2 * 100, 1)
+      cat("✓ North America performs", advantage, "% better\n")
+      ml_winner <- "North America"
+    } else {
+      advantage <- round((global_r2 - na_r2) / na_r2 * 100, 1)
+      cat("✓ Global dataset performs", advantage, "% better\n")
+      ml_winner <- "Global"
+    }
+  } else {
+    ml_winner <- "Inconclusive"
+  }
+} else {
+  cat("Insufficient variables for ML testing\n")
+  ml_winner <- "Inconclusive"
+}
+```
+
+## 5. Research Interpretability
+
+```{r interpretability}
+cat("=== RESEARCH INTERPRETABILITY ASSESSMENT ===\n")
+
+# Simplified interpretability scoring
+interpretability_scores <- data.frame(
+  Factor = c(
+    "Agricultural System Homogeneity",
+    "Data Quality and Completeness",
+    "Geographic Coherence", 
+    "Policy Relevance",
+    "Methodological Clarity",
+    "Sample Size and Power",
+    "Generalizability"
+  ),
+  
+  North_America = c(90, 85, 95, 95, 85, 60, 60),
+  Global = c(40, 75, 30, 70, 50, 90, 95),
+  
+  Weight = c(0.15, 0.20, 0.10, 0.15, 0.15, 0.15, 0.10)
+)
+
+# Calculate weighted scores
+na_interp_score <- sum(interpretability_scores$North_America * interpretability_scores$Weight)
+global_interp_score <- sum(interpretability_scores$Global * interpretability_scores$Weight)
+
+cat("INTERPRETABILITY COMPARISON:\n")
+cat("Factor                      | Weight | NA Score | Global | Weighted Diff\n")
+cat("----------------------------|--------|----------|--------|---------------\n")
+
+for(i in 1:nrow(interpretability_scores)) {
+  row <- interpretability_scores[i, ]
+  weighted_diff <- (row$North_America - row$Global) * row$Weight
+  
+  cat(sprintf("%-27s | %-6.2f | %-8d | %-6d | %-+13.2f\n",
+              row$Factor, row$Weight, row$North_America, row$Global, weighted_diff))
+}
+
+cat("\nWEIGHTED INTERPRETABILITY SCORES:\n")
+cat("North America:", round(na_interp_score, 1), "/100\n")
+cat("Global:", round(global_interp_score, 1), "/100\n")
+
+if(na_interp_score > global_interp_score) {
+  cat("✓ North America has better research interpretability\n")
+  interp_winner <- "North America"
+} else {
+  cat("✓ Global dataset has better research interpretability\n")
+  interp_winner <- "Global"
+}
+```
+
+## 6. Final Recommendation
+
+```{r final-recommendation}
+cat("=== FINAL RECOMMENDATION ===\n\n")
+
+# Simple scoring system
+factors <- c("sample_size", "data_quality", "ml_performance", "interpretability")
+scores <- data.frame(
+  Factor = c("Sample Size", "Data Quality", "ML Performance", "Interpretability"),
+  Weight = c(0.25, 0.30, 0.25, 0.20),
+  NA_Score = numeric(4),
+  Global_Score = numeric(4)
+)
+
+# Sample size scoring
+if(exists("extended_na") && exists("extended_global")) {
+  if(extended_global$Complete_Cases > extended_na$Complete_Cases) {
+    scores$NA_Score[1] <- 30
+    scores$Global_Score[1] <- 70
+  } else {
+    scores$NA_Score[1] <- 70
+    scores$Global_Score[1] <- 30
+  }
+}
+
+# Data quality scoring
+if(improvement > 2) {
+  scores$NA_Score[2] <- 70
+  scores$Global_Score[2] <- 30
+} else if(improvement < -2) {
+  scores$NA_Score[2] <- 30
+  scores$Global_Score[2] <- 70
+} else {
+  scores$NA_Score[2] <- 50
+  scores$Global_Score[2] <- 50
+}
+
+# ML performance scoring
+if(exists("ml_winner")) {
+  if(ml_winner == "North America") {
+    scores$NA_Score[3] <- 70
+    scores$Global_Score[3] <- 30
+  } else if(ml_winner == "Global") {
+    scores$NA_Score[3] <- 30
+    scores$Global_Score[3] <- 70
+  } else {
+    scores$NA_Score[3] <- 50
+    scores$Global_Score[3] <- 50
+  }
+}
+
+# Interpretability scoring
+if(interp_winner == "North America") {
+  scores$NA_Score[4] <- 80
+  scores$Global_Score[4] <- 20
+} else {
+  scores$NA_Score[4] <- 20
+  scores$Global_Score[4] <- 80
+}
+
+# Calculate final weighted scores
+na_final <- sum(scores$NA_Score * scores$Weight)
+global_final <- sum(scores$Global_Score * scores$Weight)
+
+cat("DECISION MATRIX:\n")
+cat("Factor           | Weight | NA Score | Global | Winner\n")
+cat("-----------------|--------|----------|--------|----------\n")
+
+for(i in 1:nrow(scores)) {
+  winner <- ifelse(scores$NA_Score[i] > scores$Global_Score[i], "N. America", 
+                  ifelse(scores$Global_Score[i] > scores$NA_Score[i], "Global", "Tie"))
+  
+  cat(sprintf("%-16s | %-6.2f | %-8.0f | %-6.0f | %s\n",
+              scores$Factor[i], scores$Weight[i], 
+              scores$NA_Score[i], scores$Global_Score[i], winner))
+}
+
+cat("\nFINAL WEIGHTED SCORES:\n")
+cat("North America:", round(na_final, 1), "/100\n")
+cat("Global:", round(global_final, 1), "/100\n")
+
+# Final recommendation
+if(na_final > global_final) {
+  recommendation <- "North America"
+  confidence <- round(na_final / (na_final + global_final) * 100, 1)
+} else {
+  recommendation <- "Global"
+  confidence <- round(global_final / (na_final + global_final) * 100, 1)
+}
+
+cat("\n🎯 FINAL RECOMMENDATION:", recommendation, "\n")
+cat("Confidence Level:", confidence, "%\n")
+
+# Rationale
+cat("\nRATIONALE:\n")
+if(recommendation == "North America") {
+  cat("✓ Better data quality outweighs smaller sample size\n")
+  cat("✓ Superior research interpretability\n")
+  cat("✓ Reduced confounding from homogeneous systems\n")
+  cat("✓ More actionable insights for regional policy\n")
+} else {
+  cat("✓ Larger sample size provides better statistical power\n")
+  cat("✓ Broader generalizability\n")
+  cat("✓ Global applicability of results\n")
+  cat("✓ Higher publication impact potential\n")
+}
+
+cat("\nNEXT STEPS:\n")
+cat("1. Implement the recommended approach\n")
+cat("2. Document this decision in your methodology\n")
+cat("3. Plan validation appropriate to your choice\n")
+cat("4. Consider limitations and acknowledge trade-offs\n")
+```
+
+## Conclusion
+
+This analysis provides a fast, comprehensive comparison of all variables while avoiding computational bottlenecks. The recommendation is based on:
+
+- **Complete variable inventory** across all categories
+- **Effective sample sizes** for realistic modeling scenarios
+- **Data quality assessment** with specific improvements quantified
+- **Statistical summaries** of key variables
+- **ML performance testing** with efficient algorithms
+- **Research interpretability** framework
+
+The decision balances sample size vs. data quality trade-offs while considering your research objectives and practical constraints.

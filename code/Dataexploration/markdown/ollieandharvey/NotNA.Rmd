@@ -1,0 +1,531 @@
+---
+title: "Wheat Dataset Exploration and Analysis"
+author: "Sebastian Dohne"
+date: "June 2025"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    code_folding: show
+    fig_width: 12
+    fig_height: 8
+  pdf_document:
+    toc: true
+    fig_width: 12
+    fig_height: 8
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width = 10, fig.height = 6)
+```
+
+## Project overview
+
+The this is the dataset I have for my final project detailed below titled:  Predicting crop yields in selected region using multivariate statistical and ML approaches
+
+This project aims to predict crop yields in a selected region by leveraging data-driven methods, including multivariate statistical analyses and machine learning (ML) approaches. the dataset includes a combination of environmental, climatic, and socio-economic data to build robust models that predict crop yields with high accuracy. The project will involve tasks such as data preprocessing, covariate selection, spatial and temporal autocorrelation detection, and model tuning. 
+
+Currently, the methods that I am looking at in regards to ML are: Random Forest, XGboost and elastic nets, ANNs and possibly SVRs where deemed appropriate, as these methods can handle categorical and numerical datatypes. From there, my next step was to use more traditional approaches, such as general additive models and non-linear regression to do analyses with the variables deemed most important via ML. 
+
+## Overview
+
+This analysis explores a wheat dataset containing yield information across different countries, locations, and time periods. The primary objectives are:
+
+- Perform comprehensive data cleaning and quality assessment
+- Create interactive visualizations to understand geographic and temporal patterns
+- Assess data completeness and identify missing value patterns
+- Evaluate the dataset's suitability for machine learning applications using quantitative metrics
+
+## Load Required Libraries
+
+```{r libraries}
+  library(data.table)    # For fast file reading
+  library(tidyverse)     # Data manipulation
+  library(knitr)         # Tables
+  library(ggplot2)       # Static plots only
+  library(scales)        # For formatting
+  library(leaflet)
+  library(gt)
+  library(kableExtra)
+  library(plotly)  # Add this to your libraries section
+  library(terra)     # For raster data handling (modern replacement for raster package)
+  library(leaflet)   # Already in your code
+  library(leafem)    # Optional: provides addGeotiff() for better TIF handling
+  library(rasterVis)
+  library(viridis)
+
+# Parallel processing
+library(furrr)        # Parallel mapping functions
+```
+
+## Data Loading and Initial Exploration
+
+```{r data-loading}
+# Load wheat data 
+# Note: fileEncoding handles special characters in country/location names
+# Update this path to match where your CSV file is located:
+data <- read.csv("../../../../data/Data/explorationdatasets/AllbutNA.csv", fileEncoding = "utf-8")
+
+# Loading AEZ raster data
+aez_raster <- terra::rast("../../../../data/MSc - Sebastian/gbcl-wheat-msc/data-raw/otherdata/aez_v9v2red_5m_CRUTS32_Hist_8110_100_avg.tif")
+
+```
+
+### Initial Dataset inspection
+
+```{r}
+cat("Dataset dimensions:", dim(data), "\n")
+cat("Number of countries:", length(unique(data$Country)), "\n")
+cat("Time period covered:", range(data$Observation.period, na.rm = TRUE), "\n")
+```
+
+
+```{r column-names}
+# Display all column names for reference
+names(data)
+```
+
+## Data Cleaning and Preprocessing
+
+### Column Selection and Type Conversion
+
+```{r data-cleaning}
+# Select key variables and rename for easier handling
+yield <- data %>%
+  select(Country, 
+         Observation.period, 
+         Location, 
+         Continent, 
+         State.Region.County.Province, 
+         longitude = Conversion.for.longitude,    # Rename for clarity
+         latitude = Conversion.for.latitude,      # Rename for clarity
+         yield_value = Grain.yield..tons.ha.1.) %>%  # Main outcome variable
+  mutate(
+    # Convert character columns to appropriate numeric types
+    longitude = as.numeric(longitude),
+    latitude = as.numeric(latitude),
+    yield_value = as.numeric(yield_value),
+    Observation.period = as.numeric(Observation.period)
+  ) %>%  
+  filter(
+    # Remove problematic observations
+    !is.na(yield_value),                    # Remove missing yield values
+    !is.na(longitude),                      # Remove missing coordinates
+    !is.na(latitude),
+    yield_value <= 30,                      # Remove unrealistic yield outliers (>30 tons/ha)
+    nchar(as.character(Observation.period)) == 4  # Keep only 4-digit years
+  )
+cat("Yield range:", range(yield$yield_value), "tons/ha\n")
+```
+
+## Geographic Visualization
+
+### Interactive Leaflet Map
+
+```{r}
+plot(aez_raster)  # Check if it renders properly
+```
+
+
+```{r leaflet-map}
+# Ensure CRS is defined and reproject if needed
+if (is.na(crs(aez_raster))) crs(aez_raster) <- "EPSG:4326"
+if (crs(aez_raster) != "EPSG:4326") aez_raster <- project(aez_raster, "EPSG:4326")
+
+# Downsample if too large
+if (ncell(aez_raster) > 1e6) aez_raster <- aggregate(aez_raster, fact = 10)
+
+# Convert raster to dataframe for ggplot
+r_df <- as.data.frame(aez_raster, xy = TRUE)
+colnames(r_df)[3] <- "zone_value"
+
+# Convert yield data to sf
+yield_sf <- st_as_sf(yield, coords = c("longitude", "latitude"), crs = 4326)
+
+# Plot
+ggplot() +
+  geom_raster(data = r_df, aes(x = x, y = y, fill = zone_value)) +
+  scale_fill_viridis(name = "Agroecological Zone", na.value = NA) +
+  geom_sf(data = yield_sf, aes(color = yield_value), size = 2, alpha = 0.8) +
+  scale_color_viridis(name = "Yield (tons/ha)", option = "inferno") +
+  theme_minimal() +
+  labs(title = "Agroecological Zones and Wheat Yield Points") +
+  coord_sf()
+```
+
+**Map Features:**
+- **Color coding:** Yellow to red gradient representing yield intensity
+- **Interactive popups:** Click markers for detailed information
+- **Legend:** Helps interpret yield values across locations
+
+## Temporal Analysis
+
+### Distribution of Observations Over Time
+
+```{r temporal-analysis}
+# Histogram showing data collection patterns over years
+ggplot(yield, aes(x = Observation.period)) +
+  geom_histogram(binwidth = 1, fill = "steelblue", color = "black", alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Distribution of Wheat Yield Observations Over Time", 
+       x = "Year", 
+       y = "Number of Observations") +
+  theme(plot.title = element_text(size = 14, face = "bold"))
+```
+
+### Yearly Summary Statistics
+
+```{r yearly-summary}
+# Summary of observations and yield by year
+yearly_summary <- yield %>%
+  group_by(Observation.period) %>%
+  summarise(
+    n_observations = n(),
+    mean_yield = round(mean(yield_value), 2),
+    median_yield = round(median(yield_value), 2),
+    n_countries = n_distinct(Country),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(Observation.period))
+
+# Display recent years
+head(yearly_summary, 10) %>%
+  kable(caption = "Recent Years: Observations and Yield Statistics")
+```
+
+## Geographic Distribution Analysis
+
+### Observations by Country and Continent
+
+```{r country-distribution}
+# Bar plot showing observations by country, colored by continent
+ggplot(yield, aes(x = reorder(Country, -table(Country)[Country]), fill = Continent)) +
+  geom_bar() +
+  theme_minimal() +
+  labs(title = "Number of Wheat Yield Observations by Country and Continent", 
+       x = "Country", 
+       y = "Number of Observations") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")) +
+  scale_fill_viridis_d(option = "plasma")
+```
+
+### Country-Continent Summary Table
+
+```{r country-table}
+# Create organized summary table by country and continent
+country_continent_table <- yield %>%
+  group_by(Country, Continent) %>%
+  summarise(
+    count = n(),
+    mean_yield = round(mean(yield_value), 2),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(count))
+
+# Display as formatted table
+country_continent_table %>%
+  head(15) %>%
+  gt() %>%
+  tab_header(title = "Top 15 Countries by Number of Observations") %>%
+  cols_label(
+    Country = "Country",
+    Continent = "Continent", 
+    count = "Observations",
+    mean_yield = "Mean Yield (tons/ha)"
+  ) %>%
+  fmt_number(columns = mean_yield, decimals = 2)
+```
+
+## Missing Data Analysis
+
+### Missing Data Heatmap by Country
+
+```{r missing-data-prep}
+# Prepare data for missing value heatmap
+missing_heatmap_data <- data %>%
+  group_by(Country) %>%
+  summarise(across(everything(), ~mean(is.na(.)) * 100), .groups = 'drop') %>%
+  pivot_longer(cols = -Country, 
+               names_to = "Variable", 
+               values_to = "Percent_Missing")
+```
+
+```{r missing-heatmap}
+# Create heatmap visualization
+ggplot(missing_heatmap_data, aes(x = Variable, y = Country, fill = Percent_Missing)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "red", name = "% Missing") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, face = "bold")) +
+  labs(title = "Missing Data Heatmap by Country", 
+       x = "Variable", 
+       y = "Country")
+```
+
+## Interactive heatmap by country
+
+```{r}
+# Percentage missing for all variables
+pct_missing_all <- data %>%
+  group_by(Country) %>%
+  summarise(
+    Total_Obs = n(),
+    across(everything(), ~round(mean(is.na(.)) * 100, 2), .names = "Pct_NA_{.col}")
+  ) %>%
+  arrange(desc(Total_Obs))
+
+# First, create the heatmap_data
+heatmap_data <- pct_missing_all %>%
+  select(-Total_Obs) %>%
+  pivot_longer(cols = -Country, 
+               names_to = "Variable", 
+               values_to = "Pct_Missing",
+               names_prefix = "Pct_NA_")
+
+# Create interactive heatmap
+p <- plot_ly(
+  data = heatmap_data,
+  x = ~Variable,
+  y = ~Country,
+  z = ~Pct_Missing,
+  type = "heatmap",
+  colorscale = "RdYlBu",
+  reversescale = TRUE,
+  hovertemplate = "Country: %{y}<br>Variable: %{x}<br>Missing: %{z}%<extra></extra>"
+) %>%
+  layout(
+    title = "Missing Data Heatmap",
+    xaxis = list(title = "Variable"),
+    yaxis = list(title = "Country")
+  )
+
+p
+```
+
+## Variable Categories Overview
+
+### Data Type and Category Breakdown
+
+```{r variable-categories}
+# Categorize variables by type
+location_time_vars <- c("id", "Data.ID", "Location", "State.Region.County.Province", 
+                       "Country", "Continent", "Latitude..N.S.", "Longitude..E.W.", 
+                       "Conversion.for.latitude", "Conversion.for.longitude", 
+                       "Location.source", "Observation.period", "X", "Y", "unit_code")
+
+crop_management_vars <- c("Wheat.Type", "Crop.variety", "Tillage.type", "Planting.date", 
+                         "Harvesting.date", "Flowering.stage", "Treatment", "Treatment.type", 
+                         "Water.regime", "Irrigation..mm.", "N.type", "N.rate..kg.N.ha.1.", 
+                         "N.fertilizer.management", "P.type", "P.rate..kg.P.ha.1.", 
+                         "Straw.return", "Plastic.film.mulching", "Planting.date.1", 
+                         "Harvesting.date.1", "rainfed_start_date", "rainfed_end_date", 
+                         "irr_start_date", "irr_end_date", "start_date", "end_date")
+
+climate_vars <- c("Climate", "Mean.annual.temperature..Â.C.", "Mean.annual.precipitation..mm.", 
+                 "temp1", "temp2", "temp3", "temp4", "temp5", "temp6", "temp7", "temp8", "temp9",
+                 "prc1", "prc2", "prc3", "prc4", "prc5", "prc6", "prc7", "prc8", "prc9", 
+                 "pr_irrigated", "AEZ", "Elevation")
+
+soil_vars <- c("Soil.type", "Soil.depth..cm.", "Sand", "Silt", "Clay", "Soil.texture", 
+              "Soil.organic.carbon..g.C.kg.1.", "Soil.organic.carbon....", "TN..g.N.kg.1.", 
+              "C.N.ratio", "Soil.pH", "BD..g.cm.3.", "Soil_N")
+
+yield_performance_vars <- c("Grain.yield..tons.ha.1.", "SE...22", "PFPN..kg.kg..1.", 
+                           "ANE..kg.kg.1.", "Replicates")
+
+environmental_vars <- c("Cumulative.N2O.fluxes..kg.N.ha.1.", "SE...56", "SD...57", 
+                       "Yield.scaled.N2O.emission..g.N.Mg.1.", "SE...59", "SD...60", 
+                       "EFd....", "Emissions..yes.no.")
+
+pest_weed_vars <- grep("Pest|weed|Main.weed", names(data), value = TRUE, ignore.case = TRUE)
+
+# Create summary table
+category_summary <- data.frame(
+  Category = c("Location & Time", "Crop & Management", "Climate", "Soil Properties", 
+               "Yield & Performance", "Environmental Impact", "Pest & Weed"),
+  Variables = c(length(location_time_vars), length(crop_management_vars), 
+                length(climate_vars), length(soil_vars), length(yield_performance_vars),
+                length(environmental_vars), length(pest_weed_vars)),
+  Data_Types = c("Mixed", "Mixed", "Numeric", "Mixed", "Numeric", "Numeric", "Mixed")
+)
+
+category_summary %>%
+  gt() %>%
+  tab_header(title = "Dataset Structure: Variables by Category") %>%
+  cols_label(
+    Category = "Variable Category",
+    Variables = "Number of Variables",
+    Data_Types = "Primary Data Types"
+  )
+
+# Show data types breakdown
+data_types <- data %>%
+  summarise_all(class) %>%
+  pivot_longer(everything(), names_to = "Variable", values_to = "Type") %>%
+  count(Type, name = "Count") %>%
+  arrange(desc(Count))
+
+data_types %>%
+  gt() %>%
+  tab_header(title = "Data Types Distribution") %>%
+  cols_label(Type = "Data Type", Count = "Number of Variables")
+```
+
+## Data Coverage Summary
+
+### Completeness by Variable Category
+
+```{r data-coverage}
+# Function to calculate completeness for variable groups
+calculate_completeness <- function(data, var_list, category_name) {
+  if(length(var_list) > 0) {
+    available_vars <- intersect(var_list, names(data))
+    if(length(available_vars) > 0) {
+      complete_any <- data %>%
+        select(all_of(available_vars)) %>%
+        mutate(has_any_data = rowSums(!is.na(.)) > 0) %>%
+        pull(has_any_data) %>%
+        sum()
+      
+      complete_all <- data %>%
+        select(all_of(available_vars)) %>%
+        complete.cases() %>%
+        sum()
+      
+      return(data.frame(
+        Category = category_name,
+        Variables_Available = length(available_vars),
+        Obs_With_Any_Data = complete_any,
+        Obs_With_Complete_Data = complete_all,
+        Pct_Any_Data = round(complete_any / nrow(data) * 100, 1),
+        Pct_Complete_Data = round(complete_all / nrow(data) * 100, 1)
+      ))
+    }
+  }
+  return(NULL)
+}
+
+# Calculate completeness for each category
+coverage_summary <- bind_rows(
+  calculate_completeness(data, climate_vars, "Climate"),
+  calculate_completeness(data, soil_vars, "Soil Properties"),
+  calculate_completeness(data, crop_management_vars, "Crop & Management"),
+  calculate_completeness(data, yield_performance_vars, "Yield & Performance"),
+  calculate_completeness(data, environmental_vars, "Environmental Impact")
+)
+
+coverage_summary %>%
+  gt() %>%
+  tab_header(title = "Data Coverage by Category") %>%
+  cols_label(
+    Category = "Variable Category",
+    Variables_Available = "Variables",
+    Obs_With_Any_Data = "Obs. w/ Any Data",
+    Obs_With_Complete_Data = "Obs. w/ Complete Data",
+    Pct_Any_Data = "% Any Data",
+    Pct_Complete_Data = "% Complete"
+  )
+```
+
+## Variable Completeness Dashboard
+
+### Comprehensive Variable Assessment
+
+```{r completeness-dashboard}
+# Create comprehensive variable summary
+var_summary <- data %>%
+  summarise_all(list(
+    count = ~sum(!is.na(.)),
+    pct_complete = ~round(sum(!is.na(.)) / n() * 100, 1),
+    min_val = ~ifelse(is.numeric(.), round(min(., na.rm = TRUE), 2), NA),
+    max_val = ~ifelse(is.numeric(.), round(max(., na.rm = TRUE), 2), NA),
+    n_unique = ~n_distinct(., na.rm = TRUE)
+  )) %>%
+  pivot_longer(everything(), names_to = "variable_stat", values_to = "value") %>%
+  separate(variable_stat, into = c("variable", "statistic"), sep = "_(?=count$|pct_complete$|min_val$|max_val$|n_unique$)") %>%
+  pivot_wider(names_from = statistic, values_from = value) %>%
+  arrange(desc(pct_complete))
+
+# Display all variables by completeness
+var_summary %>%
+  gt() %>%
+  tab_header(title = "All Variables by Data Completeness") %>%
+  cols_label(
+    variable = "Variable",
+    count = "Count",
+    pct_complete = "% Complete",
+    min_val = "Min Value",
+    max_val = "Max Value", 
+    n_unique = "Unique Values"
+  ) %>%
+  fmt_number(columns = c(pct_complete), decimals = 1)
+```
+
+### Completeness Visualization
+
+```{r completeness-viz}
+# Completeness distribution
+ggplot(var_summary, aes(x = pct_complete)) +
+  geom_histogram(bins = 20, fill = "steelblue", alpha = 0.7, color = "white") +
+  theme_minimal() +
+  labs(title = "Distribution of Variable Completeness",
+       x = "Percentage Complete",
+       y = "Number of Variables") +
+  geom_vline(xintercept = 50, color = "red", linetype = "dashed", size = 1) +
+  annotate("text", x = 55, y = max(table(cut(var_summary$pct_complete, 20))) * 0.8, 
+           label = "50% threshold", color = "red")
+```
+
+## Data Source and Quality Indicators
+
+### ML Readiness Assessment
+
+```{r ml-readiness}
+# Assess dataset readiness for ML
+ml_readiness <- data.frame(
+  Assessment_Category = c(
+    "Sample Size",
+    "Geographic Coverage", 
+    "Temporal Coverage",
+    "Target Variable (Yield)",
+    "Climate Variables",
+    "Soil Variables", 
+    "Management Variables",
+    "Overall ML Readiness"
+  ),
+  
+  Status = c(
+    ifelse(nrow(data) >= 100, "✓ Good", "⚠ Limited"),
+    ifelse(length(unique(data$Country)) >= 5, "✓ Good", "⚠ Limited"),
+    ifelse(max(data$Observation.period, na.rm = TRUE) - min(data$Observation.period, na.rm = TRUE) >= 10, "✓ Good", "⚠ Limited"),
+    ifelse(sum(!is.na(data$Grain.yield..tons.ha.1.)) / nrow(data) >= 0.8, "✓ Good", "⚠ Limited"),
+    ifelse(sum(!is.na(data$Mean.annual.temperature..Â.C.)) / nrow(data) >= 0.5, "✓ Good", "⚠ Limited"),
+    ifelse(sum(!is.na(data$Soil.pH)) / nrow(data) >= 0.3, "✓ Good", "⚠ Limited"),
+    ifelse(sum(!is.na(data$N.rate..kg.N.ha.1.)) / nrow(data) >= 0.3, "✓ Good", "⚠ Limited"),
+    "Ready for Analysis"
+  ),
+  
+  Details = c(
+    paste(nrow(data), "observations"),
+    paste(length(unique(data$Country)), "countries"),
+    paste(max(data$Observation.period, na.rm = TRUE) - min(data$Observation.period, na.rm = TRUE), "year span"),
+    paste(round(sum(!is.na(data$Grain.yield..tons.ha.1.)) / nrow(data) * 100, 1), "% complete"),
+    paste(round(sum(!is.na(data$Mean.annual.temperature..Â.C.)) / nrow(data) * 100, 1), "% complete"),
+    paste(round(sum(!is.na(data$Soil.pH)) / nrow(data) * 100, 1), "% complete"),
+    paste(round(sum(!is.na(data$N.rate..kg.N.ha.1.)) / nrow(data) * 100, 1), "% complete"),
+    "Proceed with feature selection"
+  )
+)
+
+ml_readiness %>%
+  gt() %>%
+  tab_header(title = "Machine Learning Readiness Assessment") %>%
+  cols_label(
+    Assessment_Category = "Category",
+    Status = "Status",
+    Details = "Details"
+  )
+```
