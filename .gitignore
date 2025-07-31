@@ -1,3 +1,18 @@
+
+
+
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+#datafiles
+*.csv
+*.xlsx
+*.nc
+*.hdf
+*.h5
 *~
 *.tif
 *.tmp
