@@ -1,0 +1,310 @@
+ahc_cluster,Location,Rows_at_Location
+2005000,"Carrington, ND",2
+2005000,"Crookston, MN",2
+2005000,"Langdon, ND",2
+2005001,"Butte County and Colusa County, CA",130
+2005001,"Sacramento Delta, CA",66
+2005001,"Yolo County at the University of California Davis, CA",66
+2005002,Saku,14
+2005002,Auksi,12
+2005003,"Kern County, CA",74
+2005003,"Kings County, CA",74
+2005004,"Brookings, SD",2
+2005005,Krakow,12
+2005006,"St. Paul, MN",2
+2005007,Broadbalk,300
+2005008,"Selby, SD",2
+2005009,Yaqui Valley (Cajeme District),2
+2006000,"Carrington, ND",1
+2006000,"Crookston, MN",1
+2006000,"Langdon, ND",1
+2006001,"Kern County, CA",37
+2006001,"Kings County, CA",37
+2006002,Broadbalk,150
+2006002,Hillesden Estate,22
+2006003,"Sacramento Delta, CA",37
+2006003,"Yolo County at the University of California Davis, CA",37
+2006004,Krakow,6
+2006005,"St. Paul, MN",1
+2006006,"Selby, SD",1
+2006007,Yaqui Valley (Cajeme District),1
+2006008,"Brookings, SD",1
+2008000,"Carrington, ND",1
+2008000,"Crookston, MN",1
+2008000,"Langdon, ND",1
+2008001,"Butte County and Colusa County, CA",40
+2008001,"Sacramento Delta, CA",40
+2008001,"Yolo County at the University of California Davis, CA",40
+2008002,"Flakkebjerg, Denmark",4
+2008002,"Foulum, Denmark",4
+2008003,Broadbalk,132
+2008003,Hillesden Estate,29
+2008004,"Kern County, CA",40
+2008004,"Kings County, CA",40
+2008005,Yaqui Valley (Cajeme District),1
+2008006,"Celaya, Mexico",4
+2008007,Ihinger Hof (conventional farming research station),20
+2008007,Kleinhohenheim (organic farming research station),1
+2008008,"St. Paul, MN",1
+2008009,Saku,3
+2008010,"Selby, SD",1
+2008011,"Brookings, SD",1
+2009000,"Carrington, ND",1
+2009000,"Crookston, MN",1
+2009000,"Langdon, ND",1
+2009001,"Kern County, CA",33
+2009001,"Kings County, CA",33
+2009002,"Sacramento Delta, CA",33
+2009002,"Yolo County at the University of California Davis, CA",33
+2009002,"Butte County and Colusa County, CA",32
+2009003,Broadbalk,150
+2009003,Hillesden Estate,28
+2009004,Norman E. Borlaug Experiment Station (CENEB),70
+2009004,Yaqui Valley (Cajeme District),1
+2009005,"St. Paul, MN",1
+2009006,"Selby, SD",1
+2009007,Auksi,3
+2009008,"Brookings, SD",1
+2010000,"Carrington, ND",1
+2010000,"Crookston, MN",1
+2010000,"Langdon, ND",1
+2010001,"Kings County, CA",41
+2010001,"Kern County, CA",36
+2010002,"Butte County and Colusa County, CA",37
+2010002,"Yolo County at the University of California Davis, CA",35
+2010002,"Sacramento Delta, CA",33
+2010002,California,5
+2010003,Broadbalk,150
+2010003,Hillesden Estate,29
+2010004,"Kellogg Biological Station (KBS) Long-Term Ecological Research (LTER) site, MI",35
+2010005,Aberdeen,2
+2010006,"St. Paul, MN",1
+2010007,Norman E. Borlaug Experiment Station (CENEB),72
+2010007,Yaqui Valley (Cajeme District),1
+2010008,"Selby, SD",1
+2010009,"Brookings, SD",1
+2011000,"Carman, Canada",6
+2011000,"Oak Bluff, Canada",6
+2011000,"Manitoba, Canada",3
+2011001,"Kern County, CA",39
+2011001,"Kings County, CA",39
+2011002,"Yolo County at the University of California Davis, CA",39
+2011002,"Butte County and Colusa County, CA",37
+2011002,"Sacramento Delta, CA",37
+2011002,California,5
+2011003,"Imperial County, CA",33
+2011004,Broadbalk,150
+2011004,Hillesden Estate,28
+2011005,"Norwegian Institute of Bioeconomy Research, Norway",5
+2011006,"Gauna, Spain",10
+2011007,ZP Agra VelkÃ½ TÃ½nec,6
+2011008,"Stuttgart, Germany",8
+2011009,Norman E. Borlaug Experiment Station (CENEB),72
+2011009,Yaqui Valley (Cajeme District),1
+2012000,"Kern County, CA",38
+2012000,"Kings County, CA",35
+2012001,"Yolo County at the University of California Davis, CA",33
+2012001,"Butte County and Colusa County, CA",31
+2012002,"Carman, Canada",6
+2012002,"Oak Bluff, Canada",6
+2012003,"Munster, Germany",7
+2012003,"Billerbeck, Germany",4
+2012003,"Lavesum, Germany",4
+2012004,Norman E. Borlaug Experiment Station (CENEB),72
+2012004,Yaqui Valley (Cajeme District),1
+2012005,"Imperial County, CA",38
+2012006,Broadbalk,150
+2012007,Agroscope Research Station,16
+2012008,ZP Agra VelkÃ½ TÃ½nec,6
+2012009,"Kiel, Germany",7
+2013000,"Carrington, ND",1
+2013000,"Crookston, MN",1
+2013001,"Manitoba, Canada",3
+2013001,"Langdon, ND",1
+2013002,"Yolo County at the University of California Davis, CA",51
+2013002,"Butte County and Colusa County, CA",46
+2013002,"Sacramento Delta, CA",45
+2013003,"Munster, Germany",4
+2013004,ENEB (Campo Experimental Norman E. Borlaug),4500
+2013004,Norman E. Borlaug Experiment Station (CENEB),72
+2013004,Yaqui Valley (Cajeme District),1
+2013005,"Imperial County, CA",47
+2013006,Broadbalk,150
+2013007,"St. Paul, MN",1
+2013008,"Alberta, Canada",5
+2013009,"Kern County, CA",45
+2013010,"Selby, SD",1
+2013011,"Brookings, SD",1
+2014000,"Glyndon, MN",7
+2014000,"Carrington, ND",1
+2014000,"Crookston, MN",1
+2014001,"Manitoba, Canada",3
+2014001,"Langdon, ND",1
+2014002,"Sacramento Delta, CA",47
+2014002,"Yolo County at the University of California Davis, CA",47
+2014002,"Butte County and Colusa County, CA",46
+2014003,ENEB (Campo Experimental Norman E. Borlaug),4500
+2014003,Norman E. Borlaug Experiment Station (CENEB),72
+2014003,Yaqui Valley (Cajeme District),1
+2014004,Marchouch,48
+2014004,Sidi Allal Tazi,48
+2014005,"Kern County, CA",47
+2014005,"Kings County, CA",47
+2014006,Tsibet,65
+2014007,"Arkaute, Spain",6
+2014008,"Imperial County, CA",47
+2014009,Broadbalk,150
+2014010,WÃ¼rzburg,112
+2014011,"St. Paul, MN",1
+2014012,"Alberta, Canada",5
+2014013,"Selby, SD",1
+2014014,JemhÃ¢a Shaim,48
+2014015,"Brookings, SD",1
+2015000,"Carrington, ND",1
+2015000,"Langdon, ND",1
+2015001,Melk Zhar,48
+2015001,Tessaout,48
+2015002,"Kings County, CA",50
+2015002,"Kern County, CA",49
+2015003,ENEB (Campo Experimental Norman E. Borlaug),4500
+2015003,Norman E. Borlaug Experiment Station (CENEB),72
+2015003,Yaqui Valley (Cajeme District),1
+2015004,"Glyndon, MN",7
+2015004,"Crookston, MN",1
+2015005,Tsibet,60
+2015006,Marchouch,48
+2015006,Sidi el Aydi,48
+2015007,"Central Maryland Research and Education Center, Beltsville",16
+2015007,"Wye Research and Education Center, Queenstown",16
+2015008,"Sacramento Delta, CA",50
+2015008,"Yolo County at the University of California Davis, CA",50
+2015009,Broadbalk,132
+2015010,Bouhmidi Pilot farm in the area of Khemis Miliana commune,144
+2015011,Viterbo,8
+2015012,"Imperial County, CA",50
+2015013,"St. Paul, MN",1
+2015014,"Alberta, Canada",7
+2015015,"Selby, SD",1
+2015016,"Alberta, Canada",5
+2015017,experimental station of the University of Agriculture,10
+2015018,"Brookings, SD",1
+2015019,Spain,3
+2015020,JemhÃ¢a Shaim,48
+2016000,"Giresta, Staby SÃ¤teri",2
+2016000,NybbleÂ ,2
+2016001,"Butte County and Colusa County, CA",41
+2016001,"Sacramento Delta, CA",41
+2016001,"Yolo County at the University of California Davis, CA",41
+2016002,Norman E. Borlaug Experiment Station (CENEB),72
+2016002,Yaqui Valley (Cajeme District),1
+2016003,Tsibet,324
+2016004,EskilstorpsgÃ¥rd,2
+2016004,KlostergÃ¥rden,2
+2016004,Stora UppÃ¥kravÃ¤gen,2
+2016005,"Kansas State University Rocky Ford experimental station, KS",500
+2016006,"Kern County, CA",41
+2016007,Viterbo,8
+2016008,Broadbalk,132
+2016009,Kabe,288
+2016010,"Imperial County, CA",41
+2016011,experimental station of the University of Agriculture,10
+2016012,"Alberta, Canada",7
+2016013,Asendorf,118
+2016014,"Arkaute, Spain",10
+2016015,"Madrid, Spain",7
+2016016,"Central Alberta, Canada",15
+2017000,"Giresta, Staby SÃ¤teri",2
+2017000,NybbleÂ ,2
+2017001,"Fresno, CA",4920
+2017001,"Kern County, CA",1685
+2017001,"Kings County, CA",45
+2017002,"Davis, CA",3280
+2017002,"Solano, CA",1640
+2017002,"Delta, CA",1476
+2017002,"Colusa, CA",1312
+2017002,"Butte County and Colusa County, CA",45
+2017002,"Yolo County at the University of California Davis, CA",45
+2017002,"Sacramento Delta, CA",43
+2017003,"Imperial County, CA",1525
+2017004,experimental station of the University of Agriculture,10
+2017005,South East Ari,40
+2017006,EskilstorpsgÃ¥rd,2
+2017006,KlostergÃ¥rden,2
+2017006,Stora UppÃ¥kravÃ¤gen,2
+2017007,Maize Research Institute,40
+2017008,Broadbalk,150
+2017009,Viterbo,9
+2017010,"Ebro Valley, Spain",4
+2017011,"Central Alberta, Canada",15
+2017012,Demonstartion Farm and Seeds Production,40
+2017013,Norman E. Borlaug Experiment Station (CENEB),72
+2017013,Yaqui Valley (Cajeme District),1
+2017014,Bahri Dagdas R.I,40
+2017015,"Kansas State University Rocky Ford experimental station, KS",359
+2017016,Inst. Of Plant Production,40
+2018000,Bahri Dagdas R.I,76
+2018000,Hisar Seeds Experimental Field - ÅereflikoÃ§hisar-Ankara,40
+2018000,Central Field Crop Research Institute,36
+2018000,HISAR Seeds,36
+2018001,"Davis, CA",4756
+2018001,"Solano, CA",1394
+2018001,"Colusa, CA",984
+2018001,"Yolo County at the University of California Davis, CA",41
+2018001,"Butte County and Colusa County, CA",40
+2018001,"Sacramento Delta, CA",39
+2018002,Norman E. Borlaug Experiment Station (CENEB),72
+2018002,Yaqui Valley (Cajeme District),1
+2018003,"Fresno, CA",3280
+2018003,"Kern County, CA",1681
+2018003,"Kings County, CA",1681
+2018004,South East Ari,40
+2018005,Agricultural Institute Osijek,36
+2018006,ICARDA,40
+2018007,KlostergÃ¥rden,2
+2018007,Stora UppÃ¥kravÃ¤gen,2
+2018008,"Imperial County, CA",1521
+2018009,Rostov ARI,39
+2018009,Rostov Ari,35
+2018010,Trakya Ari,40
+2018011,"Ashland Bottoms experimental station, KS",399
+2018012,Uppsala,40
+2018013,Broadbalk,150
+2018014,Plant Production Institute,40
+2018015,CÃ©rÃ©la inc.,40
+2018016,Krasnodar Lukyanenko Research Institute of Agriculture,76
+2018017,Transitional zone agricultural research institute,36
+2018018,Agronom breeding company,40
+2018019,"Ebro Valley, Spain",4
+2018020,NybbleÂ ,2
+2019000,Bahri Dagdas R.I,78
+2019000,Central Field Crop Research Institute,78
+2019000,HISAR Seeds,78
+2019001,"Butte County and Colusa County, CA",38
+2019001,"Sacramento Delta, CA",38
+2019001,"Yolo County at the University of California Davis, CA",38
+2019002,Kampetorp,2
+2019002,Nybble,2
+2019003,Rostov ARI,78
+2019004,Agricultural Institute Osijek,78
+2019004,"Rimski Sancevi, Inst. Of Field And Veg. Crops",78
+2019005,Goshebado,192
+2019006,Plant Production Institute,39
+2019006,"Plant Production Institute nd. a. V.Ya. Yuryev Kharkiv, Ukraine",39
+2019007,Transitional zone agriculturel research Ä±nstitute,38
+2019007,Transitional zone agriculturel researh Ä±nstitute,38
+2019008,Trakya Ari,39
+2019009,"Ashland Bottoms experimental station, KS",385
+2019010,South East Ari,78
+2019011,KlostergÃ¥rden,2
+2019012,"Kern County, CA",38
+2019013,Yaqui Valley (Cajeme District),1
+2019014,"Giresta, Staby SÃ¤teri",2
+2019015,Broadbalk,149
+2019016,Agronom breeding company,78
+2020000,"Flo, Bragnum",2
+2020000,NyhemÂ ,2
+2020001,"Giresta, Staby SÃ¤teri",2
+2020002,KlostergÃ¥rden,2
+2020003,"Ashland Bottoms experimental station, KS",459
+2020004,"USDA-ARS Central Great Plains Research Station in Washington County, CO",24
+2020005,Broadbalk,150
