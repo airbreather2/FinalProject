@@ -2,21 +2,75 @@ library(terra)
 library(dplyr)
 
 # Load in main dataset data
-dat <- read.csv("../../../../data/finaldatasets/testdata/jittered_treedata.csv")
-
-#Datachecks
-dat <- unique(dat)
-
-dat <- dat[!duplicated(dat$id), ]
+dat <- read.csv("../../../../data/finaldatasets/testdata/jittereddata/Treedataupdate1.csv")
 
 
-dat_duplicated <- dat[dat$id %in% dat$id[duplicated(dat$id)], ]
+#################Salar nc file extraction func #######################
 
-#quick datacheck
-sum(duplicated(dat$id))
+extract_weather_variable_salar <- function(df, nc_path, var_prefix = "x", window_length = 9, start_year = 1979) {
+  # Compute sowing year
+  df$sowing_year <- ifelse(df$start_date > df$end_date, 
+                           df$Observation.period - 1, 
+                           df$Observation.period)
+  
+  # Load raster
+  r <- rast(nc_path)
+  n_layers <- nlyr(r)
+  
+  # Create date sequence starting from start_year (default 1979)
+  # Assuming monthly data starting from January of start_year
+  start_date_ref <- as.Date(paste(start_year, "01", "01", sep = "-"))
+  all_dates <- seq(start_date_ref, by = "month", length.out = n_layers)
+  
+  # Extract values at coordinates
+  coords <- df[, c("Conversion.for.longitude", "Conversion.for.latitude")]
+  extracted <- extract(r, coords)[, -1] # Remove ID column
+  
+  # Name columns using constructed dates
+  colnames(extracted) <- paste0(var_prefix, "_", format(all_dates, "%Y_%m"))
+  
+  # Add ID to extracted values
+  var_vals <- cbind(id = df$id, extracted)
+  
+  # Extract features for each observation
+  result_list <- lapply(1:nrow(df), function(i) {
+    row <- df[i, ]
+    
+    # Compute window dates
+    start_date <- as.Date(paste(row$sowing_year, row$start_date, "01", sep = "-"))
+    window_dates <- seq(start_date, by = "month", length.out = window_length)
+    window_cols <- paste0(var_prefix, "_", format(window_dates, "%Y_%m"))
+    
+    # Fill in with NAs for missing columns
+    vals <- rep(NA_real_, window_length)
+    matching_cols <- window_cols %in% colnames(var_vals)
+    
+    if (any(matching_cols)) {
+      # Extract matching values
+      available_cols <- window_cols[matching_cols]
+      vals[matching_cols] <- as.numeric(var_vals[i, available_cols])
+    }
+    
+    c(row$id, row$sowing_year, vals)
+  })
+  
+  # Build result data frame
+  result <- as.data.frame(do.call(rbind, result_list))
+  colnames(result) <- c("id", "sowing_year", paste0(var_prefix, 1:window_length))
+  
+  # Convert types
+  result$id <- as.integer(result$id)
+  result$sowing_year <- as.integer(result$sowing_year)
+  result[, 3:ncol(result)] <- lapply(result[, 3:ncol(result)], as.numeric)
+  
+  return(result)
+}
 
 
-##############NETCDF extraction code #############################
+
+
+
+##############New NETCDF extraction code #############################
 
 
 extract_weather_variable <- function(df, nc_path, var_prefix = "x", window_length = 9, startdate) {
@@ -26,44 +80,44 @@ extract_weather_variable <- function(df, nc_path, var_prefix = "x", window_lengt
                            df$Observation.period - 1,
                            df$Observation.period)
   
-  # Load raster and create date sequence
+  # Load raster and get time
   r <- rast(nc_path)
-  all_dates <- seq(as.Date(paste0(startdate, "-01-01")), by = "month", length.out = nlyr(r)) #generates a monthly sequence by length for the length of the monthly time series
+  all_dates <- time(r)  # Use actual time values from NetCDF
   
   # Extract values at coordinates
-  coords <- df[, c("longitude_jittered", "latitude_jittered")]
-  extracted <- extract(r, coords)[, -1]  # Remove ID column that gets added with extraction
+  coords <- df[, c("Conversion.for.longitude", "Conversion.for.latitude")]
+  extracted <- extract(r, coords)[, -1]  # Remove ID column
   
-  # Create column names for time series which covers the entire temporal span of the nc file
+  # Name columns using actual dates
   colnames(extracted) <- paste0(var_prefix, "_", format(all_dates, "%Y_%m"))
   
-  # Add ID column to the extracted df 
+  # Add ID to extracted values
   var_vals <- cbind(id = df$id, extracted)
   
   # Extract features for each observation
   result_list <- lapply(1:nrow(df), function(i) {
     row <- df[i, ]
     
-    # Generate window dates based on sowing year and start date
+    # Compute window dates
     start_date <- as.Date(paste(row$sowing_year, row$start_date, "01", sep = "-"))
     window_dates <- seq(start_date, by = "month", length.out = window_length)
-    
-    # Get column names for this window
     window_cols <- paste0(var_prefix, "_", format(window_dates, "%Y_%m"))
     
-    # Extract values
-    vals <- as.numeric(var_vals[i, window_cols])
+    # Fill in with NAs for missing columns
+    vals <- rep(NA_real_, window_length)
+    matching_cols <- window_cols %in% colnames(var_vals)
+    if (any(matching_cols)) {
+      vals[matching_cols] <- as.numeric(var_vals[i, window_cols[matching_cols]])
+    }
     
-    # Return result
     c(row$id, row$sowing_year, vals)
   })
   
-  # Convert to data frame
-  result <- do.call(rbind, result_list)
-  result <- as.data.frame(result)
+  # Build result data frame
+  result <- as.data.frame(do.call(rbind, result_list))
   colnames(result) <- c("id", "sowing_year", paste0(var_prefix, 1:window_length))
   
-  # Convert to proper types
+  # Convert types
   result$id <- as.integer(result$id)
   result$sowing_year <- as.integer(result$sowing_year)
   result[, 3:ncol(result)] <- lapply(result[, 3:ncol(result)], as.numeric)
@@ -113,8 +167,8 @@ merge_weather_data <- function(main_df, weather_df) {
 
 ##################################Run the function for desired monthly feature ##################################
 #Run the extraction code
-
-temp_df <- extract_weather_variable(
+#temperature
+temp_df <- extract_weather_variable_salar(
   dat,
   "../../../../data/finaldatasets/covariates/Covariates/temperature_1979_2022.nc",
   "temp",
@@ -122,81 +176,133 @@ temp_df <- extract_weather_variable(
   "1979"
 )
 
-
-prc_df <- extract_weather_variable(
+#Precipitation 
+prc_df <- extract_weather_variable_salar(
   dat,
   "../../../../data/finaldatasets/covariates/Covariates/total_precipitation_1979_2022.nc",
-  "pre",
+  "prc",
    9,
   "1979"
 )
 
-sum(duplicated(dat$id))
+#NMVI
+NVMI_df <- extract_weather_variable(
+  dat,
+  "../../../../data/finaldatasets/covariates/Covariates/NDVI_monthly_10km_2004_2020.nc",
+  "NDVI",
+  9,
+  "2004"
+)
+
+#Evaporation 
+Evap_df <- extract_weather_variable(
+  dat,
+  "../../../../data/finaldatasets/covariates/Covariates/evaporation.nc",
+  "Evap",
+  9,
+  "2004"
+)
+
+#Evaporative stress
+EvapS_df <- extract_weather_variable(
+  dat,
+  "../../../../data/finaldatasets/covariates/Covariates/evap_stress.nc",
+  "EvapS",
+  9,
+  "2004"
+)
+
+#Soil moisture 
+Soilmoisture_df <- extract_weather_variable(
+  dat,
+  "../../../../data/finaldatasets/covariates/Covariates/soil_moisture.nc",
+  "SoilM",
+  9,
+  "2004"
+)
+
+#Transpiration
+transpiration_df <- extract_weather_variable(
+  dat,
+  "../../../../data/finaldatasets/covariates/Covariates/transpiration.nc",
+  "Trans",
+  9,
+  "2004"
+)
 
 
-#Merge into the full dataset
+#####################################Merge into the full dataset ##############################################
+
+
+
 #merge temp
 dat <- merge_weather_data(dat, temp_df)
 
 #merge prc
 dat <- merge_weather_data(dat, prc_df)
 
-write.csv(dat, ("../../../../data/finaldatasets/testdata/Treedataupdate.csv"))
+#merge NDMI
+dat <- merge_weather_data(dat, NVMI_df)
+
+#merge Evaporation
+dat <- merge_weather_data(dat, Evap_df)
+
+#merge Evap S
+dat <- merge_weather_data(dat, EvapS_df)
+
+#merge soil moisture 
+dat <- merge_weather_data(dat, Soilmoisture_df)
+
+#merge Transpiration
+dat <- merge_weather_data(dat, transpiration_df)
 
 
 
 #----------------------------------------------------------------------------
 
-# Extract the value of other single layer 
-
-coords <- dat[,c("longitude_jittered","latitude_jittered")]
-
-dem <- terra::rast("../../../../data/finaldatasets/covariates/Covariates/elevation_world.tif")
-aez <- terra::rast("../../../../data/finaldatasets/covariates/Covariates/aez_v9v2red_5m_CRUTS32_Hist_8110_100_avg.tif")
-clay <- terra::rast("../../../../data/finaldatasets/covariates/Covariates/clay_0_30cm.tif")
-sand <- terra::rast("../../../../data/finaldatasets/covariates/Covariates/sand_0_30cm.tif")
-silt <- terra::rast("../../../../data/finaldatasets/covariates/Covariates/silt_0_30cm.tif")
-ph <- terra::rast("../../../../data/finaldatasets/covariates/Covariates/phh2o_0_30cm.tif")
-soc <- terra::rast("../../../../data/finaldatasets/covariates/Covariates/soc_0_30cm.tif")
-pr_irrigated <- terra::rast("../../../../data/finaldatasets/covariates/Covariates/irrigated_gmia_v5_aei_pct.asc")
-
-nlyr(dem)
-nlyr(aez)
-nlyr(pr_irrigated)
-
-dem_coords <- terra::extract(dem, coords, ID = FALSE)
-aez_coords <- terra::extract(aez,coords, ID = FALSE)
-clay_coords <- terra::extract(clay,coords, ID = FALSE)
-sand_coords <- terra::extract(sand,coords, ID = FALSE)
-silt_coords <- terra::extract(silt,coords, ID = FALSE)
-ph_coords <- terra::extract(ph,coords, ID = FALSE)
-soc_coords <- terra::extract(soc,coords, ID = FALSE)
-pr_irrigated_coords <- terra::extract(pr_irrigated,coords, ID = FALSE)
-
-
-trial_df <- cbind(dat, dem_coords, aez_coords,
-                  clay_coords, sand_coords, silt_coords, ph_coords, soc_coords,
-                  pr_irrigated_coords)
-
-
-trial_df <- trial_df %>%
-  rename(
-    Elevation = elevation_world,
-    Soil.organic.carbon..g.C.kg.1. = `soc_0-5cm`,
-    Clay = `clay_5-15cm`,
-    Silt = `silt_0-5cm`,
-    Soil.pH = `phh2o_0-5cm`,
-    pr_irrigated = irrigated_gmia_v5_aei_pct,
-    Sand = `sand_0-5cm`,
-    AEZ = aez_v9v2red_5m_CRUTS32_Hist_8110_100_avg,
-    Grain.yield..tons.ha.1. = yield
+# === Function: extract + rename static covariates ===
+extract_static_covariates <- function(df) {
+  coords <- df[, c("Conversion.for.longitude", "Conversion.for.latitude")]
+  
+  covariate_paths <- list(
+    elevation_world = "../../../../data/finaldatasets/covariates/Covariates/elevation_world.tif",
+    aez_v9v2red_5m_CRUTS32_Hist_8110_100_avg = "../../../../data/finaldatasets/covariates/Covariates/aez_v9v2red_5m_CRUTS32_Hist_8110_100_avg.tif",
+    clay_5_15cm = "../../../../data/finaldatasets/covariates/Covariates/clay_0_30cm.tif",
+    sand_0_5cm = "../../../../data/finaldatasets/covariates/Covariates/sand_0_30cm.tif",
+    silt_0_5cm = "../../../../data/finaldatasets/covariates/Covariates/silt_0_30cm.tif",
+    phh2o_0_5cm = "../../../../data/finaldatasets/covariates/Covariates/phh2o_0_30cm.tif",
+    soc_0_5cm = "../../../../data/finaldatasets/covariates/Covariates/soc_0_30cm.tif",
+    irrigated_gmia_v5_aei_pct = "../../../../data/finaldatasets/covariates/Covariates/irrigated_gmia_v5_aei_pct.asc",
+    soil_nitrogen = "../../../../data/finaldatasets/covariates/Covariates/soil_nitrogen_0_30cm.tif"
   )
+  
+  for (varname in names(covariate_paths)) {
+    r <- rast(covariate_paths[[varname]])
+    df[[varname]] <- extract(r, coords, ID = FALSE)[,1]
+  }
+  
+  names(dat)
+  
+  # Rename to match modeling pipeline
+  df <- df %>%
+    rename(
+      Elevation = elevation_world,
+      AEZ = aez_v9v2red_5m_CRUTS32_Hist_8110_100_avg,
+      Clay = clay_5_15cm,
+      Sand = sand_0_5cm,
+      Silt = silt_0_5cm,
+      Soil.pH = phh2o_0_5cm,
+      Soil.organic.carbon..g.C.kg.1. = soc_0_5cm,
+      pr_irrigated = irrigated_gmia_v5_aei_pct,
+      Soil_N = soil_nitrogen
+    )
+  
+  return(df)
+}
 
-overlap_cols <- intersect(names(dat), names(trial_df))
-print(overlap_cols)
-dat[overlap_cols] <- trial_df[overlap_cols]
+# === Run extraction ===
+dat <- extract_static_covariates(dat)
 
-warnings()
+# === Write output ===
+write.csv(dat, ("../../../../data/finaldatasets/testdata/Treedataupdate1.csv"))
 
-
-write.csv(dat, ("../../../../data/finaldatasets/testdata/Treedataupdate.csv"))
