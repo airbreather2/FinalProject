@@ -2,6 +2,7 @@ import pandas as pd
 from tabulate import tabulate
 import geopandas as gpd
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import LabelEncoder
 
 def summarize_dataframe(df):
     """
@@ -129,3 +130,30 @@ def make_bounds_mask(df, coord_cols, yield_col, bounds):
         (df[lon_col] <= bounds['max_lon']) &
         (df[yield_col].notna())
     )
+
+
+#Binrary encoding function
+def binary_encode_column(series, column_name=None):
+    """
+    Manual binary encoding using your existing imports
+    """
+        
+    if column_name is None:
+        column_name = series.name
+    
+    # Label encode first to get consistent integer mapping
+    le = LabelEncoder()
+    encoded = le.fit_transform(series.astype(str))
+    
+    # Calculate bits needed
+    n_categories = len(le.classes_)
+    n_bits = int(np.ceil(np.log2(n_categories))) if n_categories > 1 else 1
+    
+    # Create binary representation
+    binary_df = pd.DataFrame(index=series.index)
+    
+    for bit in range(n_bits):
+        col_name = f"{column_name}_bin_{bit}"
+        binary_df[col_name] = (encoded >> bit) & 1
+    
+    return binary_df, le

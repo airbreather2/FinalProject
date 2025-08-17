@@ -2,7 +2,7 @@ library(terra)
 library(dplyr)
 
 # Load in main dataset data
-dat <- read.csv("../../../../data/finaldatasets/testdata/jittereddata/Treedataupdate1.csv")
+dat <- read.csv("../../../../data/finaldatasets/testdata/finalfr/testdata.csv")
 
 
 #################Salar nc file extraction func #######################
@@ -125,7 +125,6 @@ extract_weather_variable <- function(df, nc_path, var_prefix = "x", window_lengt
   return(result)
 }
 
-# Usage:
 # temp_features <- extract_weather_variable(dat, "temperature.nc", "temp")
 # precip_features <- extract_weather_variable(dat, "precipitation.nc", "prc")
 
@@ -260,42 +259,32 @@ dat <- merge_weather_data(dat, transpiration_df)
 
 #----------------------------------------------------------------------------
 
-# === Function: extract + rename static covariates ===
 extract_static_covariates <- function(df) {
   coords <- df[, c("Conversion.for.longitude", "Conversion.for.latitude")]
   
   covariate_paths <- list(
-    elevation_world = "../../../../data/finaldatasets/covariates/Covariates/elevation_world.tif",
-    aez_v9v2red_5m_CRUTS32_Hist_8110_100_avg = "../../../../data/finaldatasets/covariates/Covariates/aez_v9v2red_5m_CRUTS32_Hist_8110_100_avg.tif",
-    clay_5_15cm = "../../../../data/finaldatasets/covariates/Covariates/clay_0_30cm.tif",
-    sand_0_5cm = "../../../../data/finaldatasets/covariates/Covariates/sand_0_30cm.tif",
-    silt_0_5cm = "../../../../data/finaldatasets/covariates/Covariates/silt_0_30cm.tif",
-    phh2o_0_5cm = "../../../../data/finaldatasets/covariates/Covariates/phh2o_0_30cm.tif",
-    soc_0_5cm = "../../../../data/finaldatasets/covariates/Covariates/soc_0_30cm.tif",
-    irrigated_gmia_v5_aei_pct = "../../../../data/finaldatasets/covariates/Covariates/irrigated_gmia_v5_aei_pct.asc",
-    soil_nitrogen = "../../../../data/finaldatasets/covariates/Covariates/soil_nitrogen_0_30cm.tif"
+    Elevation = "../../../../data/finaldatasets/covariates/Covariates/elevation_world.tif",
+    AEZ = "../../../../data/finaldatasets/covariates/Covariates/aez_v9v2red_5m_CRUTS32_Hist_8110_100_avg.tif",
+    Clay = "../../../../data/finaldatasets/covariates/Covariates/clay_0_30cm.tif",
+    Sand = "../../../../data/finaldatasets/covariates/Covariates/sand_0_30cm.tif",
+    Silt = "../../../../data/finaldatasets/covariates/Covariates/silt_0_30cm.tif",
+    Soil.pH = "../../../../data/finaldatasets/covariates/Covariates/phh2o_0_30cm.tif",
+    Soil.organic.carbon..g.C.kg.1. = "../../../../data/finaldatasets/covariates/Covariates/soc_0_30cm.tif",
+    pr_irrigated = "../../../../data/finaldatasets/covariates/Covariates/irrigated_gmia_v5_aei_pct.asc",
+    Soil_N = "../../../../data/finaldatasets/covariates/Covariates/soil_nitrogen_0_30cm.tif"
   )
   
   for (varname in names(covariate_paths)) {
     r <- rast(covariate_paths[[varname]])
-    df[[varname]] <- extract(r, coords, ID = FALSE)[,1]
+    
+    # Remove existing column if present
+    if (varname %in% names(df)) {
+      df[[varname]] <- NULL
+    }
+    
+    # Extract and assign
+    df[[varname]] <- extract(r, coords, ID = FALSE)[, 1]
   }
-  
-  names(dat)
-  
-  # Rename to match modeling pipeline
-  df <- df %>%
-    rename(
-      Elevation = elevation_world,
-      AEZ = aez_v9v2red_5m_CRUTS32_Hist_8110_100_avg,
-      Clay = clay_5_15cm,
-      Sand = sand_0_5cm,
-      Silt = silt_0_5cm,
-      Soil.pH = phh2o_0_5cm,
-      Soil.organic.carbon..g.C.kg.1. = soc_0_5cm,
-      pr_irrigated = irrigated_gmia_v5_aei_pct,
-      Soil_N = soil_nitrogen
-    )
   
   return(df)
 }
@@ -304,5 +293,6 @@ extract_static_covariates <- function(df) {
 dat <- extract_static_covariates(dat)
 
 # === Write output ===
-write.csv(dat, ("../../../../data/finaldatasets/testdata/Treedataupdate1.csv"))
+write.csv(dat, "../../../../data/finaldatasets/testdata/finalfr/Treetest1.csv")
+
 

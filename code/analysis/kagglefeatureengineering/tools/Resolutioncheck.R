@@ -2,7 +2,7 @@ library(terra)
 library(sf)
 
 # Set data path and filenames
-data_path <- "../../../data/MSc - Sebastian/gbcl-wheat-msc/data-raw/otherdata"
+data_path <- "../../../data/finaldatasets/covariates/Covariates"
 
 file_names <- c(
   "aez_v9v2red_5m_CRUTS32_Hist_8110_100_avg.tif",
